@@ -1,16 +1,35 @@
 import sys
 import os
 import time
-import asyncio
 import logging
 from dotenv import load_dotenv
 
-from handlers.team_chat import (
-    create_team_chat,
-    verify_team_chat,
-    handle_lobby_id_prompt,
-    handle_lobby_id_message,
-    handle_lobby_id,
+from telegram.request import HTTPXRequest
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    ChatMemberHandler,
+    filters,
+)
+
+from core import globals
+from core.trust import load_trust
+from core.infractions import load_infractions, save_infractions
+from core.rating import load_ratings, load_matches
+from core.bans import load_bans
+from core.names import load_names, load_nick_timestamps
+
+from handlers.profile import start, profile, top, trust, history, set_name
+from handlers.report import report_command, load_report_log
+from handlers.queue import find, handle_mode_choice, handle_leave_queue
+from handlers.matchmaking import (
+    handle_match_actions,
+    handle_result_confirmation,
+    find_match_1v1,
+    find_match_5v5,
 )
 from handlers.admin import (
     ban_command,
@@ -22,31 +41,17 @@ from handlers.admin import (
     end_match,
 )
 
-from handlers.profile import start, profile, top, trust, history, set_name
-from handlers.report import report_command, load_report_log
-from handlers.queue import find, handle_mode_choice, handle_leave_queue
-from handlers.matchmaking import (
-    handle_match_actions,
-    handle_result_confirmation,
-    find_match_1v1,
-    find_match_5v5,
+from handlers.team_chat import (
+    create_team_chat,
+    verify_team_chat,
+    handle_lobby_id_prompt,
+    handle_lobby_id_message,
+    handle_lobby_id,
+    handle_new_chat_members,     # ✅
+    handle_team_chat_member,     # ✅
+    handle_open_welcome_callback # 👈 ОБЯЗАТЕЛЬНО добавить ЭТО
 )
-from core.trust import load_trust
-from core.infractions import load_infractions, save_infractions
-from core.rating import load_ratings, load_matches
-from core.bans import load_bans
-from core.names import load_names, load_nick_timestamps
-from core import globals
 
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
-from telegram.request import HTTPXRequest
 
 # Пути
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -66,6 +71,12 @@ if not my_bot_token:
     sys.exit(1)
 
 last_reset = 0  # Сброс варнов
+
+
+async def debug_mention(update, context):
+    uid = update.effective_user.id
+    html = f'<a href="tg://user?id={uid}">проверь клик</a>'
+    await update.message.reply_text(html, parse_mode="HTML")
 
 
 # ✅ Унифицированная загрузка всех данных
@@ -88,6 +99,7 @@ async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
     now = int(time.time())
 
     try:
+        # Эти функции — async, поэтому await тут корректен внутри job queue
         await find_match_1v1(bot)
         await find_match_5v5(bot)
 
@@ -103,8 +115,7 @@ async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
         logger.exception("❌ Ошибка в matchmaking_job")
 
 
-# 🚀 Асинхронная точка входа
-async def main():
+def main():
     logger.info("🚀 Запуск бота...")
 
     request = HTTPXRequest(connect_timeout=5.0, read_timeout=10.0)
@@ -115,6 +126,9 @@ async def main():
         .concurrent_updates(True) \
         .build()
 
+    
+    # Делаем приложение доступным из других модулей
+    globals.app = app
     globals.job_queue = app.job_queue
 
     from handlers.matchmaking import send_search_reminder
@@ -123,16 +137,16 @@ async def main():
     load_all_data()
 
     # Обычные команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("profile", profile))
-    app.add_handler(CommandHandler("top", top))
-    app.add_handler(CommandHandler("trust", trust))
-    app.add_handler(CommandHandler("history", history))
-    app.add_handler(CommandHandler("setname", set_name))
-    app.add_handler(CommandHandler("report", report_command))
-    app.add_handler(CommandHandler("find", find))
+    app.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("profile", profile, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("top", top, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("trust", trust, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("history", history, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("setname", set_name, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("report", report_command, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("find", find, filters=filters.ChatType.PRIVATE))
 
-    # Админские и debug-команды (одно место!)
+    # Админские и debug-команды
     ADMIN_COMMANDS = [
         ("ban", ban_command),
         ("unban", unban_command),
@@ -145,50 +159,70 @@ async def main():
     for cmd, handler in ADMIN_COMMANDS:
         app.add_handler(CommandHandler(cmd, handler))
 
-    # Команды для работы с командными чатами
+    # Командные чаты
     app.add_handler(CommandHandler("create_team_chat", create_team_chat))
     app.add_handler(CommandHandler("verify", verify_team_chat))
 
-    # Обработчики ввода ID лобби
-    app.add_handler(
-        MessageHandler(filters.TEXT & filters.ChatType.GROUPS,
-                       handle_lobby_id_message))
-    app.add_handler(
-        MessageHandler(filters.TEXT & filters.ChatType.GROUPS,
-                       handle_lobby_id))
-    app.add_handler(
-        CallbackQueryHandler(handle_lobby_id_prompt,
-                             pattern="^enter_lobby_id_"))
+    # ✅ Приветствия новых участников (оба типа событий)
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
+    app.add_handler(ChatMemberHandler(handle_team_chat_member, ChatMemberHandler.CHAT_MEMBER))
 
-    # Обработчики кнопок
+    # Ввод ID лобби
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_lobby_id_message), group=0)
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_lobby_id), group=1)
+    app.add_handler(CallbackQueryHandler(handle_lobby_id_prompt, pattern="^enter_lobby_id_"))
+
+    # Кнопки
     app.add_handler(CallbackQueryHandler(handle_mode_choice, pattern="^mode_"))
-    app.add_handler(CallbackQueryHandler(handle_leave_queue,
-                                         pattern="^leave_"))
+    app.add_handler(CallbackQueryHandler(handle_leave_queue, pattern="^leave_"))
+    app.add_handler(CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel)_"))
+    app.add_handler(CallbackQueryHandler(handle_result_confirmation, pattern="^(report_win|confirm_win|reject_win)_"))
+    app.add_handler(CallbackQueryHandler(handle_open_welcome_callback, pattern=r"^open_welcome:"))
+
+    app.add_handler(CommandHandler("debug_mention", debug_mention, filters=filters.ChatType.GROUPS))
+    
+
+    from telegram.error import TelegramError
+
+    async def _log_errors(update, context):
+        # Подробный лог в консоль
+        logger.exception("⚠️ Exception in handler", exc_info=context.error)
+        # Опционально — шлём админу в личку текст ошибки Телеграма
+        if isinstance(context.error, TelegramError):
+            try:
+                await context.bot.send_message(
+                    chat_id=globals.ADMIN_IDS[0],
+                    text=f"❗️TelegramError: <code>{context.error}</code>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+    app.add_error_handler(_log_errors)
+
+    
+    
+    async def _drop_commands_in_groups(update, context):
+        try:
+            await update.effective_message.delete()
+        except Exception:
+            pass
+
+# Любые /команды в группах — удаляем
     app.add_handler(
-        CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel)_"))
-    app.add_handler(
-        CallbackQueryHandler(handle_result_confirmation,
-                             pattern="^(report_win|confirm_win|reject_win)_"))
+        MessageHandler(filters.COMMAND & filters.ChatType.GROUPS, _drop_commands_in_groups),
+        group=1
+    )
 
     # Фоновая задача
     app.job_queue.run_repeating(matchmaking_job, interval=30, first=0)
 
-    # Функция завершения работы
-    async def on_shutdown(app_: Application):
-        logger.info("🛑 Завершение работы...")
-
-    app.post_shutdown = on_shutdown
-
-    # ✅ Запуск
-    await app.run_polling()
+    # Запуск (синхронный; сам управляет event loop'ом)
+    app.run_polling(
+        allowed_updates=["message", "chat_member", "callback_query", "my_chat_member"]
+    )
 
 
-# 🧠 Точка входа
+
 if __name__ == "__main__":
-    try:
-        import nest_asyncio
-        nest_asyncio.apply()  # ← Эта строка устраняет конфликт event loop'ов
-
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("⛔️ Бот остановлен вручную")
+    main()

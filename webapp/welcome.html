@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Приветствие</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin:0; padding:16px; background:#f7f7f7; }
+    .card { border-radius:16px; padding:16px; background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.08); }
+    .title { font-size:18px; font-weight:700; margin-bottom:8px; }
+    .row { margin:8px 0; }
+    .roster { margin-top:8px; padding-left:18px; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:rgba(0,0,0,.06); margin-left:8px; font-size:12px; }
+    .footer { margin-top:16px; font-size:12px; opacity:.7; }
+    a { color: inherit; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="app" class="card">Загрузка…</div>
+
+  <script>
+    const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
+    const matchId = new URL(location.href).searchParams.get("m") || "";
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/welcome?m=${encodeURIComponent(matchId)}`, {
+          headers: { "X-Telegram-Init-Data": tg.initData || "" }
+        });
+        if (!res.ok) { document.getElementById("app").textContent = "Ошибка доступа. Открой через кнопку в чате."; return; }
+
+        const { user, welcome } = await res.json();
+        const mates = (welcome.teammates || []).map(t => {
+          const label = t.username ? `@${t.username}` : (t.name || "игрок");
+          return `<li><a href="tg://user?id=${t.id}">${label}</a></li>`;
+        }).join("");
+
+        document.getElementById("app").innerHTML = `
+          <div class="title">${welcome.title || "Матч"}</div>
+          <div class="row"><b>Твоя роль:</b> ${welcome.role || "—"} <span class="pill">${welcome.team_side || ""}</span></div>
+          <div class="row"><b>Лобби:</b> ${welcome.lobby_id || "—"}</div>
+          <div class="row"><b>Тиммейты:</b> <ul class="roster">${mates}</ul></div>
+          ${welcome.notes ? `<div class="row"><b>Заметки:</b> ${welcome.notes}</div>` : ""}
+          <div class="footer">ID игрока: ${user.id}</div>
+        `;
+
+        tg.MainButton.setText("Ок"); tg.MainButton.onClick(() => tg.close()); tg.MainButton.show();
+      } catch(e) {
+        document.getElementById("app").textContent = "Не удалось загрузить.";
+      }
+    })();
+  </script>
+</body>
+</html>
