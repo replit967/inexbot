@@ -494,7 +494,7 @@ async def handle_team_chat_member(update: Update, context: ContextTypes.DEFAULT_
     became_member = (new in ("member", "administrator", "creator")) and (old not in ("member", "administrator", "creator"))
     if not became_member:
         return
-    user = cmu.from_user
+    user = cmu.new_chat_member.user
     if user.is_bot:
         return
     if not _should_welcome(chat.id, user.id):
@@ -537,7 +537,8 @@ def build_roster_for_side(match: dict, side: str) -> list[dict]:
     for m in team:
         raw_uid = m.get("user_id") or m.get("id") or m.get("uid")
         try:
-            uid = int(str(raw_uid))
+            raw_str = str(raw_uid).strip()
+            uid = int(raw_str) if raw_str else None
         except Exception:
             uid = None
         roster.append({
