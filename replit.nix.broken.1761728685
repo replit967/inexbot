@@ -1,20 +1,17 @@
-{ pkgs }:
-{
+{ pkgs }: {
   deps = [
-    pkgs.git
-    pkgs.openssh
     pkgs.nano
+    pkgs.pari
+    pkgs.openssh
+    pkgs.zip
+    pkgs.unzip
   ];
-
+}
   shellHook = ''
-    # наш PATH и функции
     export PATH="$HOME/bin:$PATH"
     [ -f "$HOME/.my_aliases" ] && . "$HOME/.my_aliases"
-
-    # автозагрузка ssh-ключа (молча, если уже загружен)
     if ! ssh-add -l >/dev/null 2>&1; then
       eval "$(ssh-agent -s)" >/dev/null
       ssh-add ~/.ssh/id_ed25519 >/dev/null 2>&1 || true
     fi
   '';
-}
