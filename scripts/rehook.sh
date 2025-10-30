@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
-# === восстановление gp и ssh ===
+set -e
 
-# добавляем нашу папку в PATH
-export PATH="$HOME/bin:$PATH"
+: "${GITHUB_USERNAME:?Add in Replit Secrets}"
+: "${GITHUB_TOKEN:?Add in Replit Secrets}"
+: "${GITHUB_EMAIL:=user@example.com}"
 
-# функции gp / gl / gs
-gp(){ git add -A; if ! git diff --cached --quiet; then git commit -m "update"; else echo "🔎 Нет изменений для коммита — пропускаю commit."; fi; git push; }
-gl(){ git pull; }
-gs(){ git status; }
+echo "🔧 Настраиваю Git/HTTPS…"
 
-# подключаем SSH-ключ (если есть)
-eval "$(ssh-agent -s)" >/dev/null
-[ -f ~/.ssh/id_ed25519 ] && ssh-add ~/.ssh/id_ed25519 >/dev/null 2>&1 || true
+git config --global user.name "$GITHUB_USERNAME"
+git config --global user.email "$GITHUB_EMAIL"
 
-# добавляем github.com в known_hosts (чтобы не спрашивал yes)
-mkdir -p ~/.ssh
-grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null || ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+git config --global credential.helper store
+printf "https://%s:%s@github.com\n" "$GITHUB_USERNAME" "$GITHUB_TOKEN" > ~/.git-credentials
 
-echo "✅ Всё восстановлено: gp/gl/gs и SSH работают"
+REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
+if [ -n "$REMOTE_URL" ] && echo "$REMOTE_URL" | grep -qE '^git@github.com:'; then
+  HTTPS_URL="$(echo "$REMOTE_URL" | sed -E 's#^git@github.com:#https://github.com/#')"
+  git remote set-url origin "$HTTPS_URL"
+  echo "🔁 Переключил origin на HTTPS: $HTTPS_URL"
+fi
+
+gp() { git add -A && git commit -m "update" || true; git push -u origin HEAD; }
+gl() { git pull --rebase --autostash; }
+gs() { git status -sb; }
+export -f gp gl gs
+
+gp
+
+echo "✅ Готово: gp/gl/gs работают, пуш ушёл по HTTPS."
