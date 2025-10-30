@@ -18,6 +18,9 @@ logger = logging.getLogger("team_chat")
 
 USED_TEAM_CHAT_IDS = set()
 WELCOME_MSG_IDS: dict[int, int] = {}   # chat_id -> message_id закреплённой «шапки»
+_WELCOME_REFRESHED_AT: dict[int, float] = {}
+_WELCOME_REFRESH_COOLDOWN = 5.0
+
 
 # ---------------------------
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -135,6 +138,14 @@ def _should_welcome(chat_id: int, user_id: int) -> bool:
     if now - _RECENT.get(key, 0) < _TTL:
         return False
     _RECENT[key] = now
+    return True
+
+def _should_refresh_welcome(chat_id: int) -> bool:
+    now = time.time()
+    last = _WELCOME_REFRESHED_AT.get(chat_id, 0.0)
+    if now - last < _WELCOME_REFRESH_COOLDOWN:
+        return False
+    _WELCOME_REFRESHED_AT[chat_id] = now
     return True
 
 
@@ -459,16 +470,28 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
     if not msg or not chat:
         return
 
-    # держим «шапку» наверху (если уже есть — просто перепинить)
+    # держим «шапку» наверху (для новичков с скрытой историей перезапостим)
     try:
-        msg_id = WELCOME_MSG_IDS.get(chat.id)
-        if msg_id:
-            await context.bot.pin_chat_message(chat.id, msg_id, disable_notification=True)
+        mid, match, side = _find_match_and_side_by_chat(chat.id)
+        if match and side:
+            roster = build_roster_for_side(match, side)
+            if not WELCOME_MSG_IDS.get(chat.id) or _should_refresh_welcome(chat.id):
+                await _post_or_pin_welcome(
+                    context,
+                    chat.id,
+                    mid,
+                    side,
+                    roster,
+                    force_repost=True,
+                )
+            else:
+                msg_id = WELCOME_MSG_IDS.get(chat.id)
+                if msg_id:
+                    await context.bot.pin_chat_message(chat.id, msg_id, disable_notification=True)
         else:
-            mid, match, side = _find_match_and_side_by_chat(chat.id)
-            if match and side:
-                roster = build_roster_for_side(match, side)
-                await _post_or_pin_welcome(context, chat.id, mid, side, roster)
+            msg_id = WELCOME_MSG_IDS.get(chat.id)
+            if msg_id:
+                await context.bot.pin_chat_message(chat.id, msg_id, disable_notification=True)
     except Exception:
         pass
 
@@ -502,14 +525,26 @@ async def handle_team_chat_member(update: Update, context: ContextTypes.DEFAULT_
 
     # держим «шапку» наверху
     try:
-        msg_id = WELCOME_MSG_IDS.get(chat.id)
-        if msg_id:
-            await context.bot.pin_chat_message(chat.id, msg_id, disable_notification=True)
+        mid, match, side = _find_match_and_side_by_chat(chat.id)
+        if match and side:
+            roster = build_roster_for_side(match, side)
+            if not WELCOME_MSG_IDS.get(chat.id) or _should_refresh_welcome(chat.id):
+                await _post_or_pin_welcome(
+                    context,
+                    chat.id,
+                    mid,
+                    side,
+                    roster,
+                    force_repost=True,
+                )
+            else:
+                msg_id = WELCOME_MSG_IDS.get(chat.id)
+                if msg_id:
+                    await context.bot.pin_chat_message(chat.id, msg_id, disable_notification=True)
         else:
-            mid, match, side = _find_match_and_side_by_chat(chat.id)
-            if match and side:
-                roster = build_roster_for_side(match, side)
-                await _post_or_pin_welcome(context, chat.id, mid, side, roster)
+            msg_id = WELCOME_MSG_IDS.get(chat.id)
+            if msg_id:
+                await context.bot.pin_chat_message(chat.id, msg_id, disable_notification=True)
     except Exception:
         pass
 
@@ -527,6 +562,46 @@ async def handle_team_chat_member(update: Update, context: ContextTypes.DEFAULT_
 
 
 
+def _extract_user_id(member: dict) -> int | None:
+    """Попробовать вытащить числовой telegram-id из разных схем словаря."""
+    candidate_keys = (
+        "user_id",
+        "id",
+        "uid",
+        "tg_id",
+        "telegram_id",
+        "telegram_user_id",
+        "player_id",
+    )
+    raw_uid = None
+    for key in candidate_keys:
+        raw_uid = member.get(key)
+        if raw_uid not in (None, "", 0):
+            break
+    else:
+        raw_uid = None
+
+    if raw_uid is None:
+        return None
+
+    # попытаться привести напрямую
+    try:
+        uid = int(str(raw_uid).strip())
+        return uid if uid > 0 else None
+    except Exception:
+        pass
+
+    # иногда приходят строки вида "id:123456" — фильтруем цифры
+    digits = "".join(ch for ch in str(raw_uid) if ch.isdigit())
+    if not digits:
+        return None
+    try:
+        uid = int(digits)
+        return uid if uid > 0 else None
+    except Exception:
+        return None
+
+
 def build_roster_for_side(match: dict, side: str) -> list[dict]:
     """
     Формирует список игроков для кнопки приветствия.
@@ -534,13 +609,8 @@ def build_roster_for_side(match: dict, side: str) -> list[dict]:
     """
     team = _team_list(match, side)
     roster = []
-    for m in team:
-        raw_uid = m.get("user_id") or m.get("id") or m.get("uid")
-        try:
-            raw_str = str(raw_uid).strip()
-            uid = int(raw_str) if raw_str else None
-        except Exception:
-            uid = None
+    for m in team:        
+        uid = _extract_user_id(m)
         roster.append({
             "user_id": uid,
             "username": m.get("username"),
@@ -599,18 +669,47 @@ async def handle_open_welcome_callback(update: Update, context: ContextTypes.DEF
     # ВАЖНО: только ОДИН ответ — сразу с текстом поп-апа
     await q.answer(text=text, show_alert=True)
 
-async def _post_or_pin_welcome(context, chat_id: int, match_id: str, team_side: str, roster: list[dict]):
+async def _post_or_pin_welcome(
+    context,
+    chat_id: int,
+    match_id: str,
+    team_side: str,
+    roster: list[dict],
+    *,
+    force_repost: bool = False,
+):
     """Отправить/запинить «шапку» с кнопкой и запомнить её message_id."""
-    from components.webapp_button import post_welcome_button
+    old_msg_id = WELCOME_MSG_IDS.get(chat_id)
+
+    if old_msg_id and force_repost:
+        try:
+            await context.bot.unpin_chat_message(chat_id, old_msg_id)
+        except Exception:
+            pass
+        try:
+            await context.bot.delete_message(chat_id, old_msg_id)
+        except Exception:
+            pass
+        old_msg_id = None
+
+    if old_msg_id and not force_repost:
+        try:
+            await context.bot.pin_chat_message(chat_id, old_msg_id, disable_notification=True)
+            return
+        except Exception:
+            # если не удалось перепинить (удалено вручную) — запостим заново
+            old_msg_id = None
+
     try:
         msg = await post_welcome_button(
             context=context,
             chat_id=chat_id,
             match_id=str(match_id),
             team_side=team_side,
-            roster=roster
+            roster=roster,
         )
         WELCOME_MSG_IDS[chat_id] = msg.message_id
+        _WELCOME_REFRESHED_AT[chat_id] = time.time()
         try:
             await context.bot.pin_chat_message(chat_id, msg.message_id, disable_notification=True)
         except Exception:

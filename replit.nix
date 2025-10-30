@@ -7,16 +7,16 @@
   ];
 
   shellHook = ''
-    # 1) наш PATH: ~/bin первым — наш gp перекрывает системные пакеты Nix
+    # добавляем свою папку в PATH
     export PATH="$HOME/bin:$PATH"
 
-    # 2) подгрузить функции gp/gl/gs (поверх скриптов)
-    [ -f "$HOME/.my_aliases" ] && . "$HOME/.my_aliases"
-
-    # 3) опционально: автозагрузка ssh-ключа (тихо, если ключа нет)
-    if ! ssh-add -l >/dev/null 2>&1; then
-      eval "$(ssh-agent -s)" >/dev/null
-      ssh-add ~/.ssh/id_ed25519 >/dev/null 2>&1 || true
+    # если есть rehook — запускаем при старте
+    if [ -x "$HOME/bin/rehook" ]; then
+      "$HOME/bin/rehook" >/dev/null 2>&1 || true
+    elif [ -f "$HOME/workspace/scripts/rehook.sh" ]; then
+      source "$HOME/workspace/scripts/rehook.sh" >/dev/null 2>&1 || true
     fi
+
+    echo "🔥 rehook выполнен автоматически — всё готово"
   '';
 }
