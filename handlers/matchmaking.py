@@ -536,6 +536,11 @@ async def handle_result_confirmation(update, context):
         match['disputed'] = False
         globals.pending_results[match_id] = {"winner": winner, "loser": loser}
 
+        if is_bot_player(loser):
+            match['confirmed'] = set(match['players'])
+            await _finalize_match_result(match_id, context, reason="bot_auto")
+            return
+        
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("Подтвердить", callback_data=f"confirm_win_{match_id}")],
             [InlineKeyboardButton("Оспорить", callback_data=f"reject_win_{match_id}")]
@@ -555,32 +560,12 @@ async def handle_result_confirmation(update, context):
 
     elif data.startswith("confirm_win_"):
         match_id = data.split("_", 2)[2]
-        match = globals.active_matches.pop(match_id, None)
+        match = globals.active_matches.get(match_id)
         if not match or not match.get("winner"):
             return
 
-        _clear_waiting_lobby_ids(match_id)
-        
-        job = globals.match_reminders.pop(match_id, None)
-        if job:
-            job.schedule_removal()
-
-        winner = match['winner']
-        loser = [p for p in match['players'] if p != winner][0]
-
-        update_ratings([winner], [loser])
-        match_data = {
-            "players": match['players'],
-            "winner": winner,
-            "mode": match['mode'],
-            "timestamp": int(time.time())
-        }
-        add_match_history(match_id, match_data)
-        await register_clean_game(winner, context)
-        await register_clean_game(loser, context)
-
-        await context.bot.send_message(winner, "🏆 Победа подтверждена.")
-        await context.bot.send_message(loser, "👍 Вы подтвердили поражение.")        
+        match.setdefault('confirmed', set()).add(user_id)
+        await _finalize_match_result(match_id, context)
 
     elif data.startswith("reject_win_"):
         match_id = data.split("_", 2)[2]
@@ -589,6 +574,8 @@ async def handle_result_confirmation(update, context):
             return
 
         _clear_waiting_lobby_ids(match_id)
+
+        globals.pending_results.pop(match_id, None)
         
         job = globals.match_reminders.pop(match_id, None)
         if job:
@@ -606,19 +593,70 @@ async def autoconfirm_winner_later(context):
     job = context.job
     match_id = job.data["match_id"]
 
-    match = globals.active_matches.pop(match_id, None)
+    match = globals.active_matches.get(match_id)
     if not match or match.get("disputed") or not match.get("winner"):
         return
 
-    globals.match_reminders.pop(match_id, None)
+    await _finalize_match_result(match_id, context, reason="timeout")
+
+
+    async def _finalize_match_result(match_id: str, context, *, reason: str | None = None):
+        match = globals.active_matches.pop(match_id, None)
+        if not match or not match.get("winner"):
+            return
+
+        globals.pending_results.pop(match_id, None)
+        
     _clear_waiting_lobby_ids(match_id)
-    
+
+    job = globals.match_reminders.pop(match_id, None)
+    if job:
+        job.schedule_removal()
+        
     winner = match["winner"]
-    loser = [p for p in match["players"] if p != winner][0]
+    opponents = [p for p in match["players"] if p != winner]
+    if not opponents:
+        return
+    loser = opponents[0]
 
     update_ratings([winner], [loser])
-    await register_clean_game(winner, context)
-    await register_infraction(loser, "afk", context)
+    match_data = {
+        "players": match['players'],
+        "winner": winner,
+        "mode": match['mode'],
+        "timestamp": int(time.time())
+    }
+    add_match_history(match_id, match_data)
 
-    await context.bot.send_message(winner, "⏱ Победа засчитана автоматически.")
-    await context.bot.send_message(loser, "⚠️ Вы не подтвердили матч — засчитано поражение.")
+    if reason == "timeout":
+        await _register_clean_if_human(winner, context)
+        await _register_infraction_if_human(loser, "afk", context)
+        await context.bot.send_message(winner, "⏱ Победа засчитана автоматически.")
+        if not is_bot_player(loser):
+            await context.bot.send_message(loser, "⚠️ Вы не подтвердили матч — засчитано поражение.")
+        return
+
+    await _register_clean_if_human(winner, context)
+
+    if reason == "bot_auto":
+        if not is_bot_player(loser):
+            await _register_clean_if_human(loser, context)
+        await context.bot.send_message(winner, "🤖 Победа подтверждена автоматически — соперник был ботом.")
+        return
+
+    await _register_clean_if_human(loser, context)
+
+    if not is_bot_player(winner):
+        await context.bot.send_message(winner, "🏆 Победа подтверждена.")
+    if not is_bot_player(loser):
+        await context.bot.send_message(loser, "👍 Вы подтвердили поражение.")
+
+
+    async def _register_clean_if_human(user_id: int, context):
+    if not is_bot_player(int(user_id)):
+        await register_clean_game(user_id, context)
+
+
+async def _register_infraction_if_human(user_id: int, infraction: str, context):
+    if not is_bot_player(int(user_id)):
+        await register_infraction(user_id, infraction, context)

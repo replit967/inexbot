@@ -76,7 +76,7 @@ async def debug_fill_5v5(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "joined_at": now - random.randint(0, 30),
             "chat_id": fake_user_id,
             "initial_message_id": None,
-            "username": f"Bot{idx + 1}"
+            "username": f"Bot{idx + 1}",
             "is_bot": True,
         }
         globals.queue_5v5.append(player)
