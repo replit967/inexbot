@@ -15,16 +15,30 @@ from telegram.ext import ContextTypes
 # Обработка состава и уведомлений 5v5 без командных чатов
 
 
-def assign_roles(match_id: str, blue_team: list[int], red_team: list[int]) -> dict:
+def is_bot_player(user_id: int) -> bool:
+    try:
+        return user_id in globals.BOT_PLAYER_IDS
+    except AttributeError:
+        return False
+
+
+def assign_roles(match_id: str, blue_team: list[dict], red_team: list[dict]) -> dict:
     """Назначает капитанов и лидеров лобби для каждой стороны."""
 
-    blue_leader = random.choice(blue_team)
-    blue_captain_candidates = [uid for uid in blue_team if uid != blue_leader] or [blue_leader]
-    blue_captain = random.choice(blue_captain_candidates)
+    def _pick_roles(players: list[dict]) -> tuple[int, int]:
+        eligible = [p for p in players if not p.get("is_bot")]
+        pool = eligible or players
+        if not pool:
+            raise ValueError(f"No players provided for role assignment in match {match_id}")
 
-    red_leader = random.choice(red_team)
-    red_captain_candidates = [uid for uid in red_team if uid != red_leader] or [red_leader]
-    red_captain = random.choice(red_captain_candidates)
+        leader = random.choice(pool)
+        captain_candidates = [p for p in pool if p is not leader] or [leader]
+        captain = random.choice(captain_candidates)
+
+        return int(leader["user_id"]), int(captain["user_id"])
+
+    blue_leader, blue_captain = _pick_roles(blue_team)
+    red_leader, red_captain = _pick_roles(red_team)
 
     return {
         "blue": {
@@ -153,6 +167,8 @@ async def _send_5v5_match_notifications(
 
     for player in combined:
         pid = int(player.get("user_id"))
+        if player.get("is_bot"):
+            continue
         side = "blue" if pid in blue_ids else "red"
         text = build_match_preview_text(
             match_id,
@@ -175,7 +191,7 @@ async def prepare_5v5_match(
     blue_ids = [int(p.get("user_id")) for p in blue_players]
     red_ids = [int(p.get("user_id")) for p in red_players]
 
-    roles = assign_roles(match_id, blue_ids, red_ids)
+    roles = assign_roles(match_id, blue_players, red_players)
 
     match_record = {
         "players": player_ids,

@@ -2,6 +2,11 @@
 
 from config import *
 
+try:
+  BOT_PLAYER_IDS = set(BOT_PLAYER_IDS)
+except NameError:
+  BOT_PLAYER_IDS: set[int] = set()
+  
 # 🛡️ Список Telegram user_id админов (int)
 # Используй только целые числа — например: [1007208422, 123456789]
 ADMIN_IDS = [1007208422]  # <-- Добавь сюда свои id

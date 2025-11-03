@@ -36,9 +36,8 @@ async def debug_reset_ratings(update: Update, context: ContextTypes.DEFAULT_TYPE
         }
 
     # Боты
-    for i in range(7):
-        bot_id = str(900000000 + i)
-        globals.ratings[bot_id] = {
+    for bot_id in sorted(globals.BOT_PLAYER_IDS):
+        globals.ratings[str(bot_id)] = {
             "rating": 200,
             "wins": 0,
             "losses": 0
@@ -64,21 +63,21 @@ async def debug_fill_5v5(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "joined_at": now - random.randint(0, 30),
             "chat_id": uid,
             "initial_message_id": None,
-            "username": f"MyAcc{idx+1}"
+            "username": f"MyAcc{idx+1}",
         }
         globals.queue_5v5.append(player)
         fake_players.append(player)
 
     # Боты
-    for i in range(7):
-        fake_user_id = 900000000 + i
+    for idx, fake_user_id in enumerate(sorted(globals.BOT_PLAYER_IDS)):
         player = {
             "user_id": fake_user_id,
             "elo": globals.ratings.get(str(fake_user_id), {"rating": 1000})["rating"],
             "joined_at": now - random.randint(0, 30),
             "chat_id": fake_user_id,
             "initial_message_id": None,
-            "username": f"Bot{i+1}"
+            "username": f"Bot{idx + 1}"
+            "is_bot": True,
         }
         globals.queue_5v5.append(player)
         fake_players.append(player)
@@ -105,6 +104,12 @@ async def debug_fill_5v5(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "red": {"leader": captain_red["user_id"], "captain": captain_red["user_id"]},
     })
 
+    bot_ids = {int(p["user_id"]) for p in fake_players if p.get("is_bot")}
+
+    # Автоматически помечаем ботов как готовых, чтобы матч можно было начать
+    if match_record:
+        match_record.setdefault("ready", set()).update(bot_ids)
+    
     preview = build_match_preview_text(match_id, team_blue, team_red, roles)
     await update.message.reply_text(preview)
 
