@@ -10,22 +10,6 @@ from core.rating import save_ratings
 def is_admin(user_id):
     return int(user_id) in globals.ADMIN_IDS
 
-# 🚀 Запуск этапа подготовки матча (создание чатов, инструкции капитанам)
-async def debug_launch_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("⛔ Только для администратора.")
-        return
-
-    if not globals.active_matches_5v5:
-        await update.message.reply_text("⚠️ Нет активных debug матчей.")
-        return
-
-    match_id = list(globals.active_matches_5v5.keys())[-1]
-    await update.message.reply_text(f"🚀 Запуск процесса для матча {match_id}...")
-    # Импорт тут!
-    from handlers.team_chat import process_match_ready
-    await process_match_ready(match_id, context)
-
 # 🔢 Генерация уникального match_id
 def generate_match_id(length=8):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -107,53 +91,22 @@ async def debug_fill_5v5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elo_blue = sum(p["elo"] for p in team_blue)
     elo_red = sum(p["elo"] for p in team_red)
 
-    # Назначаем лидера лобби и капитанов
-    if elo_blue > elo_red:
-        lobby_team = "blue"
-    elif elo_red > elo_blue:
-        lobby_team = "red"
-    else:
-        lobby_team = random.choice(["blue", "red"])
-
     captain_blue = max(team_blue, key=lambda p: p["elo"])
     captain_red = max(team_red, key=lambda p: p["elo"])
 
-    lobby_leaders = {
-        "blue": captain_blue["user_id"] if lobby_team == "blue" else None,
-        "red": captain_red["user_id"] if lobby_team == "red" else None
-    }
-
     match_id = generate_match_id()
+    from handlers.matchmaking import prepare_5v5_match, build_match_preview_text
 
-    globals.active_matches_5v5[match_id] = {
-        'match_id': match_id,
-        'blue': team_blue,
-        'red': team_red,
-        'blue_chat_id': None,
-        'red_chat_id': None,
-        'captains': {
-            'blue': captain_blue['user_id'],
-            'red': captain_red['user_id']
-        },
-        'lobby_leaders': lobby_leaders,
-        'lobby_ids': {
-            'blue': None,
-            'red': None
-        },
-        'status': 'pending_lobby'
-    }
+    await prepare_5v5_match(context, match_id, team_blue, team_red)
 
-    await update.message.reply_text(
-        f"✅ Матч {match_id} создан (DEBUG)\n\n"
-        f"🔵 BLUE (ELO {elo_blue}):\n" +
-        '\n'.join([f"• {p['username']} (ELO: {p['elo']})" for p in team_blue]) + '\n\n' +
-        f"🔴 RED (ELO {elo_red}):\n" +
-        '\n'.join([f"• {p['username']} (ELO: {p['elo']})" for p in team_red]) + '\n\n' +
-        f"🎮 Капитаны:\n🔵 {captain_blue['username']} | 🔴 {captain_red['username']}\n" +
-        f"👑 Лидер лобби:\n" +
-        (f"🔵 {captain_blue['username']}" if lobby_team == "blue" else f"🔴 {captain_red['username']}")
-    )
+    match_record = globals.active_matches.get(match_id, {})
+    roles = match_record.get("team_roles", {
+        "blue": {"leader": captain_blue["user_id"], "captain": captain_blue["user_id"]},
+        "red": {"leader": captain_red["user_id"], "captain": captain_red["user_id"]},
+    })
 
-    # Импорт тут!
-    from handlers.team_chat import process_match_ready
-    await process_match_ready(match_id, context)
+    preview = build_match_preview_text(match_id, team_blue, team_red, roles)
+    await update.message.reply_text(preview)
+
+    taken_ids = {p["user_id"] for p in team_blue + team_red}
+    globals.queue_5v5[:] = [p for p in globals.queue_5v5 if p["user_id"] not in taken_ids]

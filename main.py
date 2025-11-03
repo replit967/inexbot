@@ -11,7 +11,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes,
     MessageHandler,
-    ChatMemberHandler,
     filters,
 )
 
@@ -30,26 +29,14 @@ from handlers.matchmaking import (
     handle_result_confirmation,
     find_match_1v1,
     find_match_5v5,
+    handle_lobby_id_submission,
 )
 from handlers.admin import (
     ban_command,
     unban_command,
     clear_reports_command,
     debug_fill_5v5,
-    debug_launch_match,
     debug_reset_ratings,
-    end_match,
-)
-
-from handlers.team_chat import (
-    create_team_chat,
-    verify_team_chat,
-    handle_lobby_id_prompt,
-    handle_lobby_id_message,
-    handle_lobby_id,
-    handle_new_chat_members,     # ✅
-    handle_team_chat_member,     # ✅
-    handle_open_welcome_callback # 👈 ОБЯЗАТЕЛЬНО добавить ЭТО
 )
 
 
@@ -95,13 +82,12 @@ def load_all_data():
 # 📅 Фоновая задача матчмейкинга + сброса варнов
 async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
     global last_reset
-    bot = context.bot
     now = int(time.time())
 
     try:
         # Эти функции — async, поэтому await тут корректен внутри job queue
-        await find_match_1v1(bot)
-        await find_match_5v5(bot)
+        await find_match_1v1(context)
+        await find_match_5v5(context)
 
         if now - last_reset >= 86400:
             for uid in globals.infractions:
@@ -152,32 +138,24 @@ def main():
         ("unban", unban_command),
         ("clearreports", clear_reports_command),
         ("debug_fill_5v5", debug_fill_5v5),
-        ("debug_launch_match", debug_launch_match),
         ("reset_ratings", debug_reset_ratings),
-        ("end_match", end_match),
     ]
     for cmd, handler in ADMIN_COMMANDS:
         app.add_handler(CommandHandler(cmd, handler))
 
-    # Командные чаты
-    app.add_handler(CommandHandler("create_team_chat", create_team_chat))
-    app.add_handler(CommandHandler("verify", verify_team_chat))
-
-    # ✅ Приветствия новых участников (оба типа событий)
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
-    app.add_handler(ChatMemberHandler(handle_team_chat_member, ChatMemberHandler.CHAT_MEMBER))
-
-    # Ввод ID лобби
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_lobby_id_message), group=0)
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_lobby_id), group=1)
-    app.add_handler(CallbackQueryHandler(handle_lobby_id_prompt, pattern="^enter_lobby_id_"))
+    # Ввод ID лобби через личные сообщения
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND,
+            handle_lobby_id_submission,
+        )
+    )
 
     # Кнопки
     app.add_handler(CallbackQueryHandler(handle_mode_choice, pattern="^mode_"))
     app.add_handler(CallbackQueryHandler(handle_leave_queue, pattern="^leave_"))
     app.add_handler(CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel)_"))
     app.add_handler(CallbackQueryHandler(handle_result_confirmation, pattern="^(report_win|confirm_win|reject_win)_"))
-    app.add_handler(CallbackQueryHandler(handle_open_welcome_callback, pattern=r"^open_welcome:"))
 
     app.add_handler(CommandHandler("debug_mention", debug_mention, filters=filters.ChatType.GROUPS))
     

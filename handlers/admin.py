@@ -3,7 +3,6 @@
 from core.globals import ADMIN_IDS
 from telegram import Update
 from telegram.ext import ContextTypes
-from telegram.error import TelegramError
 
 # ----- МОДЕРАЦИЯ -----
 async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -65,14 +64,6 @@ async def debug_fill_5v5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from handlers.debug import debug_fill_5v5 as real_fill
     await real_fill(update, context)
 
-async def debug_launch_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Запуск этапа подготовки матча (только для админов)"""
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Только для админов.")
-        return
-    from handlers.debug import debug_launch_match as real_launch
-    await real_launch(update, context)
-
 async def debug_reset_ratings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сброс рейтинга (только для админов)"""
     if update.effective_user.id not in ADMIN_IDS:
@@ -80,29 +71,4 @@ async def debug_reset_ratings(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     from handlers.debug import debug_reset_ratings as real_reset
     await real_reset(update, context)
-
-# ----- ЗАВЕРШЕНИЕ МАТЧА ВРУЧНУЮ -----
-async def end_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Завершить матч и очистить чат (только для админов)"""
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Только для админов.")
-        return
-
-    chat_id = update.effective_chat.id
-
-    # Импортируем здесь, чтобы не было циклических импортов
-    from core import globals
-    found_match_id = None
-    for match_id, match in globals.active_matches_5v5.items():
-        if match.get('blue_chat_id') == chat_id or match.get('red_chat_id') == chat_id:
-            found_match_id = match_id
-            break
-
-    if not found_match_id:
-        await update.message.reply_text("❌ Этот чат не привязан к активному матчу.")
-        return
-
-    await update.message.reply_text("🏁 Матч завершён вручную. Начинается очистка чата...")
-
-    from handlers.team_chat import cleanup_team_chats
-    await cleanup_team_chats(found_match_id, context)
+    

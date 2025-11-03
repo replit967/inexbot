@@ -6,78 +6,257 @@ from telegram.error import TelegramError
 from core import globals
 from core.rating import update_ratings, get_rating, add_match_history
 from core.infractions import register_clean_game, register_infraction
-from core.trust import recalculate_trust_score
 from telegram.ext import ContextTypes
-from core.chat_pool import release_team_chat
 
 
 
 
 
-# Обработка команды капитана для создания чата
-async def handle_create_team_chat_prompt(context, match_id, team_color: str):
-    roles = globals.team_roles.get(match_id, {})
-    if not roles:
-        return
-
-    leader_id = roles.get(team_color, {}).get("leader")
-    if not leader_id:
-        return
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚀 Создать чат команды", url="https://t.me/INEXMODEBOT?startgroup=start")]
-    ])
-
-    try:
-        await context.bot.send_message(
-            leader_id,
-            f"🔹 Вы лидер команды {team_color.upper()}.\n\n"
-            "Создайте групповой чат вашей команды и добавьте в него бота. "
-            "Затем нажмите кнопку выше для запуска подготовки.",
-            reply_markup=kb
-        )
-    except Exception as e:
-        print(f"Ошибка при отправке инструкции лидеру {team_color}: {e}")
+# Обработка состава и уведомлений 5v5 без командных чатов
 
 
-# handlers/matchmaking.py (или отдельная кнопка "Подтвердить чат")
+def assign_roles(match_id: str, blue_team: list[int], red_team: list[int]) -> dict:
+    """Назначает капитанов и лидеров лобби для каждой стороны."""
 
-async def verify_team_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
-
-    if bot_member.status not in ["administrator", "creator"]:
-        await update.message.reply_text(
-            "⚠️ *Перед началом работы, пожалуйста:*\n\n"
-            "1. Сделайте эту группу чатом вашей команды\n"
-            "2. Добавьте *бота* в этот чат\n"
-            "3. Дайте боту *права администратора*\n\n"
-            "После этого снова нажмите кнопку, чтобы продолжить.",
-            parse_mode='Markdown'
-        )
-        return
-
-    await update.message.reply_text("✅ Отлично! Бот получил права администратора и может продолжать работу.")
-
-
-def assign_roles(match_id: str, blue_team: list[int], red_team: list[int]):
     blue_leader = random.choice(blue_team)
-    blue_captain = random.choice([uid for uid in blue_team if uid != blue_leader] or [blue_leader])
+    blue_captain_candidates = [uid for uid in blue_team if uid != blue_leader] or [blue_leader]
+    blue_captain = random.choice(blue_captain_candidates)
 
     red_leader = random.choice(red_team)
-    red_captain = random.choice([uid for uid in red_team if uid != red_leader] or [red_leader])
+    red_captain_candidates = [uid for uid in red_team if uid != red_leader] or [red_leader]
+    red_captain = random.choice(red_captain_candidates)
 
-    globals.team_roles[match_id] = {
+    return {
         "blue": {
             "leader": blue_leader,
-            "captain": blue_captain
+            "captain": blue_captain,
         },
         "red": {
             "leader": red_leader,
-            "captain": red_captain
-        }
+            "captain": red_captain,
+        },
     }
 
+
+def _player_display_name(player: dict) -> str:
+    username = player.get("username")
+    if username:
+        return f"@{username}"
+
+    for key in ("name", "full_name", "first_name"):
+        value = player.get(key)
+        if value:
+            return str(value)
+
+    return f"ID {player.get('user_id')}"
+
+
+def _players_by_id(blue_players: list[dict], red_players: list[dict]) -> dict[int, dict]:
+    mapping: dict[int, dict] = {}
+    for item in blue_players + red_players:
+        uid = int(item.get("user_id"))
+        mapping[uid] = item
+    return mapping
+
+    
+def _team_summary(players: list[dict]) -> tuple[int, str]:
+    total = 0
+    lines = []
+    for player in players:
+        elo = player.get("elo")
+        try:
+            elo_value = int(elo)
+        except (TypeError, ValueError):
+            elo_value = 0
+        total += elo_value
+        elo_text = elo_value if elo_value else (elo or "—")
+        lines.append(f"• {_player_display_name(player)} (ELO: {elo_text})")
+    return total, "\n".join(lines)
+
+
+def build_match_preview_text(
+    match_id: str,
+    blue_players: list[dict],
+    red_players: list[dict],
+    roles: dict,
+    *,
+    player_id: int | None = None,
+) -> str:
+    display_id = str(match_id)[:8].upper()
+    players_map = _players_by_id(blue_players, red_players)
+
+    blue_total, blue_lines = _team_summary(blue_players)
+    red_total, red_lines = _team_summary(red_players)
+
+    def _role_label(side: str, role: str) -> str:
+        role_id = (roles.get(side) or {}).get(role)
+        if not role_id:
+            return "—"
+        player = players_map.get(role_id, {"user_id": role_id})
+        return _player_display_name(player)
+
+    text = (
+        f"✅ Матч {display_id} найден!\n\n"
+        f"🔵 BLUE (ELO {blue_total}):\n{blue_lines or '—'}\n\n"
+        f"🔴 RED (ELO {red_total}):\n{red_lines or '—'}\n\n"
+        f"🎮 Капитаны:\n🔵 {_role_label('blue', 'captain')} | 🔴 {_role_label('red', 'captain')}\n"
+        f"👑 Лидеры лобби:\n🔵 {_role_label('blue', 'leader')} | 🔴 {_role_label('red', 'leader')}"
+    )
+
+    text += "\n\n✅ Подтверди готовность с помощью кнопки ниже."
+
+    if player_id is not None:
+        side = "blue" if any(p.get("user_id") == player_id for p in blue_players) else "red"
+        text += f"\n\n🛡️ Ты играешь за {side.upper()}."
+
+        if (roles.get(side) or {}).get("captain") == player_id:
+            text += "\n⭐ Ты капитан своей команды."
+
+        leader_id = (roles.get(side) or {}).get("leader")
+        if leader_id == player_id:
+            text += "\n👑 Ты лидер лобби: создай комнату и пришли ID в ответ на это сообщение."
+        elif leader_id:
+            text += f"\n📮 Ждём ID от {_player_display_name(players_map.get(leader_id, {'user_id': leader_id}))}."
+
+    return text
+
+
+def _clear_waiting_lobby_ids(match_id: str):
+    to_remove = [uid for uid, value in globals.waiting_lobby_id.items() if value[0] == match_id]
+    for uid in to_remove:
+        globals.waiting_lobby_id.pop(uid, None)
+
+
+def _set_lobby_leaders_waiting(match_id: str, roles: dict):
+    for side, data in roles.items():
+        leader = data.get("leader")
+        if leader:
+            globals.waiting_lobby_id[leader] = (match_id, side)
+
+
+async def _send_5v5_match_notifications(
+    context,
+    match_id: str,
+    blue_players: list[dict],
+    red_players: list[dict],
+    roles: dict,
+):
+    bot = getattr(context, "bot", context)
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Готов", callback_data=f"ready_{match_id}")],
+        [InlineKeyboardButton("❌ Отменить матч", callback_data=f"cancel_{match_id}")],
+    ])
+
+    combined = blue_players + red_players
+    blue_ids = {int(p.get("user_id")) for p in blue_players}
+
+    for player in combined:
+        pid = int(player.get("user_id"))
+        side = "blue" if pid in blue_ids else "red"
+        text = build_match_preview_text(
+            match_id,
+            blue_players,
+            red_players,
+            roles,
+            player_id=pid,
+        )
+
+        await bot.send_message(pid, text, reply_markup=keyboard)
+
+
+async def prepare_5v5_match(
+    context,
+    match_id: str,
+    blue_players: list[dict],
+    red_players: list[dict],
+):
+    player_ids = [int(p.get("user_id")) for p in blue_players + red_players]
+    blue_ids = [int(p.get("user_id")) for p in blue_players]
+    red_ids = [int(p.get("user_id")) for p in red_players]
+
+    roles = assign_roles(match_id, blue_ids, red_ids)
+
+    match_record = {
+        "players": player_ids,
+        "ready": set(),
+        "mode": "5v5",
+        "winner": None,
+        "confirmed": set(),
+        "disputed": False,
+        "teams": {"blue": blue_ids, "red": red_ids},
+        "lobby_ids": {"blue": None, "red": None},
+        "team_roles": roles,
+    }
+
+    globals.active_matches[match_id] = match_record
+    _set_lobby_leaders_waiting(match_id, roles)
+    
+    try:
+        await _send_5v5_match_notifications(
+            context,
+            match_id,
+            blue_players,
+            red_players,
+            roles,
+        )
+    except Exception:
+        globals.active_matches.pop(match_id, None)
+        _clear_waiting_lobby_ids(match_id)
+        raise
+    
+    return match_record
+
+
+async def handle_lobby_id_submission(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat = update.effective_chat
+
+    if not message or not chat or chat.type != "private":    
+        return
+
+    text = (message.text or "").strip()
+    if not text:
+        return
+
+    user_id = update.effective_user.id
+    entry = globals.waiting_lobby_id.get(user_id)
+    if not entry:
+        return
+
+    match_id, side = entry
+    if len(text) > 64:
+        await context.bot.send_message(
+            user_id,
+            "⚠️ ID лобби слишком длинный. Пришли корректный ID (до 64 символов).",
+        )
+        return
+
+    if not text.isdigit():
+        await context.bot.send_message(
+            user_id,
+            "⚠️ ID лобби должен содержать только цифры.",
+        )
+        return
+
+    match = globals.active_matches.get(match_id)
+    if not match:
+        globals.waiting_lobby_id.pop(user_id, None)
+        return
+
+    match.setdefault("lobby_ids", {})[side] = text
+    globals.waiting_lobby_id.pop(user_id, None)
+
+    teammates = match.get("teams", {}).get(side, [])
+    bot = context.bot
+    for pid in teammates:
+        try:
+            if pid == user_id:
+                await bot.send_message(pid, f"✅ ID лобби {text} сохранён.")
+            else:
+                await bot.send_message(pid, f"🎮 Ваш лидер прислал ID лобби: {text}")
+        except TelegramError:
+            pass
 
 async def send_search_reminder(context: ContextTypes.DEFAULT_TYPE):
     user_id = context.job.data["user_id"]
@@ -199,36 +378,19 @@ async def find_match_5v5(context, chat_id=None, user_id=None):
 
             if max_elo - min_elo <= tolerance:
                 match_id = str(uuid.uuid4())
+                blue_players = group[:5]
+                red_players = group[5:]
                 player_ids = [p['user_id'] for p in group]
-                team1 = player_ids[:5]
-                team2 = player_ids[5:]
-
-                globals.active_matches[match_id] = {
-                    'players': player_ids,
-                    'ready': set(),
-                    'mode': '5v5',
-                    'winner': None,
-                    'confirmed': set(),
-                    'disputed': False,
-                    'teams': {'team1': team1, 'team2': team2}
-                }
-
-                # Назначаем команды
-                blue_team = team1
-                red_team = team2
-
-                # Назначаем роли
-                assign_roles(match_id, blue_team, red_team)
-
-                # ⬅️ Отправляем инструкцию для создания чата с BLUE командой
-                await handle_create_team_chat_prompt(context, match_id, "blue")
-
-                # ⬅️ Отправляем инструкцию для создания чата с RED командой
-                await handle_create_team_chat_prompt(context, match_id, "red")
                 
-                # Выводим в консоль для отладки
-                print(f"[DEBUG] Роли назначены для матча {match_id}: {globals.team_roles[match_id]}")
-                
+                try:
+                    await prepare_5v5_match(context, match_id, blue_players, red_players)
+                except TelegramError as exc:
+                    print(f"⚠️ Не удалось отправить уведомления о матче {match_id}: {exc}")
+                    continue
+                except Exception as exc:
+                    print(f"❌ Не удалось подготовить матч {match_id}: {exc}")
+                    continue
+                                
                 globals.queue_5v5[:] = [
                     p for p in queue if p["user_id"] not in player_ids
                 ]
@@ -238,32 +400,11 @@ async def find_match_5v5(context, chat_id=None, user_id=None):
                     if job:
                         job.schedule_removal()
 
-                try:
-                    kb = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("✅ Готов", callback_data=f"ready_{match_id}")],
-                        [InlineKeyboardButton("❌ Отменить матч", callback_data=f"cancel_{match_id}")]
-                    ])
-
-                    for pid in player_ids:
-                        await context.bot.send_message(
-                            pid,
-                            "👥 Найден матч 5v5!\nОжидаем подтверждение всех игроков.",
-                            reply_markup=kb
-                        )
-
-                    job = context.job_queue.run_once(
-                        autoconfirm_winner_later, 600, data={"match_id": match_id}
-                    )
-                    globals.match_reminders[match_id] = job
-
-                except TelegramError:
-                    globals.active_matches.pop(match_id, None)
-                    for p in group:
-                        globals.queue_5v5.append({
-                            "user_id": p['user_id'],
-                            "elo": p['elo'],
-                            "joined_at": p['joined_at']
-                        })
+                job = context.job_queue.run_once(
+                    autoconfirm_winner_later, 600, data={"match_id": match_id}
+                )
+                globals.match_reminders[match_id] = job
+                
                 return
 
     for player in globals.queue_5v5:
@@ -325,6 +466,8 @@ async def handle_match_actions(update, context):
         if not match:
             return
 
+        _clear_waiting_lobby_ids(match_id)
+        
         job = globals.match_reminders.pop(match_id, None)
         if job:
             job.schedule_removal()
@@ -400,6 +543,8 @@ async def handle_result_confirmation(update, context):
         if not match or not match.get("winner"):
             return
 
+        _clear_waiting_lobby_ids(match_id)
+        
         job = globals.match_reminders.pop(match_id, None)
         if job:
             job.schedule_removal()
@@ -419,12 +564,7 @@ async def handle_result_confirmation(update, context):
         await register_clean_game(loser, context)
 
         await context.bot.send_message(winner, "🏆 Победа подтверждена.")
-        await context.bot.send_message(loser, "👍 Вы подтвердили поражение.")
-
-        # ✅ Очистка чатов и возврат в пул
-        if match.get("mode") == "5v5":
-            await release_team_chat(context.bot, match.get("blue_chat_id"))
-            await release_team_chat(context.bot, match.get("red_chat_id"))
+        await context.bot.send_message(loser, "👍 Вы подтвердили поражение.")        
 
     elif data.startswith("reject_win_"):
         match_id = data.split("_", 2)[2]
@@ -432,6 +572,8 @@ async def handle_result_confirmation(update, context):
         if not match:
             return
 
+        _clear_waiting_lobby_ids(match_id)
+        
         job = globals.match_reminders.pop(match_id, None)
         if job:
             job.schedule_removal()
@@ -453,7 +595,8 @@ async def autoconfirm_winner_later(context):
         return
 
     globals.match_reminders.pop(match_id, None)
-
+    _clear_waiting_lobby_ids(match_id)
+    
     winner = match["winner"]
     loser = [p for p in match["players"] if p != winner][0]
 
@@ -463,41 +606,3 @@ async def autoconfirm_winner_later(context):
 
     await context.bot.send_message(winner, "⏱ Победа засчитана автоматически.")
     await context.bot.send_message(loser, "⚠️ Вы не подтвердили матч — засчитано поражение.")
-
-    if match.get("mode") == "5v5":
-        await cleanup_team_chats(context, match)
-
-    # ✅ Очистка чатов и возврат в пул (если 5v5)
-    if match.get("mode") == "5v5":
-        await release_team_chat(context.bot, match.get("blue_chat_id"))
-        await release_team_chat(context.bot, match.get("red_chat_id"))
-
-
-# 🧹 Автоочистка чатов после завершения матча
-async def cleanup_team_chats(context, match):
-    for color in ["blue", "red"]:
-        chat_id = match.get(f"{color}_chat_id")
-        if not chat_id:
-            continue
-
-        try:
-            # Получим список участников
-            admins = await context.bot.get_chat_administrators(chat_id)
-            members_to_remove = [admin.user.id for admin in admins if not admin.user.is_bot]
-
-            for user_id in members_to_remove:
-                try:
-                    await context.bot.ban_chat_member(chat_id, user_id)
-                    await context.bot.unban_chat_member(chat_id, user_id)
-                except Exception as e:
-                    print(f"⚠️ Не удалось удалить участника {user_id} из чата {chat_id}: {e}")
-
-            # Очистка сообщений (по желанию)
-            await context.bot.send_message(chat_id, "🧹 Матч завершён. Этот чат будет использован повторно.")
-
-        except Exception as e:
-            print(f"❌ Ошибка при очистке чата {chat_id}: {e}")
-
-        # ⬅️ Возврат чата в пул
-        from core.chat_pool import release_team_chat
-        await release_team_chat(context.bot, chat_id)
