@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 
 from telegram.request import HTTPXRequest
+from httpx import ReadError
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -104,7 +105,7 @@ async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
 def main():
     logger.info("🚀 Запуск бота...")
 
-    request = HTTPXRequest(connect_timeout=5.0, read_timeout=10.0)
+    request = HTTPXRequest(connect_timeout=5.0, read_timeout=60.0)
 
     app = Application.builder() \
         .token(my_bot_token) \
@@ -160,12 +161,14 @@ def main():
     app.add_handler(CommandHandler("debug_mention", debug_mention, filters=filters.ChatType.GROUPS))
     
 
-    from telegram.error import TelegramError
+    from telegram.error import TelegramError, NetworkError
 
     async def _log_errors(update, context):
         # Подробный лог в консоль
         logger.exception("⚠️ Exception in handler", exc_info=context.error)
         # Опционально — шлём админу в личку текст ошибки Телеграма
+        if isinstance(context.error, NetworkError) and isinstance(context.error.__cause__, ReadError):
+            return
         if isinstance(context.error, TelegramError):
             try:
                 await context.bot.send_message(

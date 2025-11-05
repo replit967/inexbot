@@ -101,7 +101,8 @@ async def debug_fill_5v5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match_record = globals.active_matches.get(match_id, {})
     roles = match_record.get("team_roles", {
         "blue": {"leader": captain_blue["user_id"], "captain": captain_blue["user_id"]},
-        "red": {"leader": captain_red["user_id"], "captain": captain_red["user_id"]},
+        "red": {"leader": None, "captain": captain_red["user_id"]},
+        "lobby_leader": captain_blue["user_id"],
     })
 
     bot_ids = {int(p["user_id"]) for p in fake_players if p.get("is_bot")}
