@@ -138,10 +138,10 @@ def build_match_preview_text(
         if lobby_leader_id == player_id:
             text += "\n👑 Ты лидер лобби: создай комнату и пришли ID в ответ на это сообщение."
         elif lobby_leader_id:
-        text += (
-            "\n📮 Ждём ID лобби от "
-            f"{_player_display_name(players_map.get(lobby_leader_id, {'user_id': lobby_leader_id}))}."
-        )
+            text += (
+                "\n📮 Ждём ID лобби от "
+                f"{_player_display_name(players_map.get(lobby_leader_id, {'user_id': lobby_leader_id}))}."
+            )
 
     return text
 
@@ -489,35 +489,35 @@ async def handle_match_actions(update, context):
                 await context.bot.send_message(
                     opponent, "Матч начался! Ждём отчёта о результате.")
             elif match['mode'] == '5v5':
-            roles = match.get("team_roles", {})
-            leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
-            red_captain = (roles.get("red") or {}).get("captain")
+                roles = match.get("team_roles", {})
+                leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
+                red_captain = (roles.get("red") or {}).get("captain")
 
-            result_keyboard = InlineKeyboardMarkup(
-                [
+                result_keyboard = InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "🔵 Победа BLUE",
-                            callback_data=f"report_win_{match_id}_blue",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔴 Победа RED",
-                            callback_data=f"report_win_{match_id}_red",
-                        )
-                    ],
-                ]
-            )
+                        [
+                            InlineKeyboardButton(
+                                "🔵 Победа BLUE",
+                                callback_data=f"report_win_{match_id}_blue",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🔴 Победа RED",
+                                callback_data=f"report_win_{match_id}_red",
+                            )
+                        ],
+                    ]
+                )            
 
-            if leader_id and not is_bot_player(leader_id):
-                await context.bot.send_message(
-                    leader_id,
-                    "Матч начался! Выберите победившую команду.",
-                    reply_markup=result_keyboard,
-                )
+                if leader_id and not is_bot_player(leader_id):
+                    await context.bot.send_message(
+                        leader_id,
+                        "Матч начался! Выберите победившую команду.",
+                        reply_markup=result_keyboard,
+                    )
 
-            for pid in match['players']:
+                for pid in match['players']:
                 if pid == leader_id or is_bot_player(pid):
                     continue
 
