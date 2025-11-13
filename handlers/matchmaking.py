@@ -287,6 +287,32 @@ async def handle_lobby_id_submission(update: Update, context: ContextTypes.DEFAU
         except TelegramError:
             pass
 
+    if match.get("mode") == "5v5":
+        roles = match.get("team_roles", {})
+        leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
+        if leader_id and int(leader_id) == int(user_id) and not is_bot_player(int(user_id)):
+            result_keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔵 Победа BLUE",
+                            callback_data=f"report_win_{match_id}_blue",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔴 Победа RED",
+                            callback_data=f"report_win_{match_id}_red",
+                        )
+                    ],
+                ]
+            )
+            await bot.send_message(
+                user_id,
+                "Когда матч завершится, выбери победившую команду.",
+                reply_markup=result_keyboard,
+            )
+
 async def send_search_reminder(context: ContextTypes.DEFAULT_TYPE):
     user_id = context.job.data["user_id"]
     chat_id = context.job.data["chat_id"]
@@ -493,28 +519,22 @@ async def handle_match_actions(update, context):
                 leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
                 red_captain = (roles.get("red") or {}).get("captain")
 
-                result_keyboard = InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "🔵 Победа BLUE",
-                                callback_data=f"report_win_{match_id}_blue",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "🔴 Победа RED",
-                                callback_data=f"report_win_{match_id}_red",
-                            )
-                        ],
-                    ]
-                )            
-
                 if leader_id and not is_bot_player(leader_id):
+                    lobby_keyboard = InlineKeyboardMarkup(
+                        [
+                            [
+                                        InlineKeyboardButton(
+                                            "📮 Отправить ID лобби",
+                                            callback_data=f"request_lobby_{match_id}",
+                                        )
+                                    ]
+                                ]
+                            )
+
                     await context.bot.send_message(
                         leader_id,
-                        "Матч начался! Выберите победившую команду.",
-                        reply_markup=result_keyboard,
+                        "Матч начался! Пришли ID лобби с помощью кнопки ниже.",
+                        reply_markup=lobby_keyboard,
                     )
 
                 for pid in match['players']:
@@ -568,6 +588,28 @@ async def handle_match_actions(update, context):
         elif result == "ban":
             await context.bot.send_message(
                 user_id, "🚫 Вы были временно забанены за отказы.")
+
+    elif data.startswith("request_lobby_"):
+    match_id = data.split("_", 2)[2]
+    match = globals.active_matches.get(match_id)
+    if not match:
+        return
+
+    roles = match.get("team_roles", {})
+    leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
+
+    if not leader_id or int(leader_id) != int(user_id):
+        return
+
+    globals.waiting_lobby_id[int(user_id)] = (match_id, "blue")
+
+    try:
+        await context.bot.send_message(
+            user_id,
+            "Пришли ID лобби ответным сообщением (только цифры).",
+        )
+    except TelegramError:
+        pass
 
 
 async def handle_result_confirmation(update, context):
@@ -763,7 +805,7 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     if not winners or not losers:
         return
 
-    update_ratings(winners, losers)
+    rating_changes = update_ratings(winners, losers)
     match_data = {
         "players": match['players'],
         "winner": winners if match.get("mode") == "5v5" else winners[0],
@@ -776,14 +818,27 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
 
     human_winners = [uid for uid in winners if not is_bot_player(uid)]
     human_losers = [uid for uid in losers if not is_bot_player(uid)]
-    
+
+    def _format_rating_change(pid: int) -> str:
+        delta = rating_changes.get(int(pid), 0)
+        sign = "+" if delta > 0 else ""
+        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid)})"
+        
     if reason == "timeout":
         for uid in human_winners:
             await _register_clean_if_human(uid, context)
-            await context.bot.send_message(uid, "⏱ Победа засчитана автоматически.")
+            await context.bot.send_message(
+                uid,
+                "⏱ Победа засчитана автоматически.\n"
+                f"Изменение рейтинга: {_format_rating_change(uid)}",
+            )
         for uid in human_losers:
             await _register_infraction_if_human(uid, "afk", context)
-            await context.bot.send_message(uid, "⚠️ Вы не подтвердили матч — засчитано поражение.")
+            await context.bot.send_message(
+                uid,
+                "⚠️ Вы не подтвердили матч — засчитано поражение.\n"
+                f"Изменение рейтинга: {_format_rating_change(uid)}",
+            )
         return
 
     for uid in human_winners:
@@ -793,7 +848,11 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         for uid in human_losers:
             await _register_clean_if_human(uid, context)
         for uid in human_winners:
-            await context.bot.send_message(uid, "🤖 Победа подтверждена автоматически — соперник был ботом.")
+            await context.bot.send_message(
+                uid,
+                "🤖 Победа подтверждена автоматически — соперник был ботом.\n"
+                f"Изменение рейтинга: {_format_rating_change(uid)}",
+            )
         return
 
     for uid in human_losers:
@@ -808,9 +867,15 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         lose_message = "👍 Вы подтвердили поражение."
 
     for uid in human_winners:
-        await context.bot.send_message(uid, win_message)
+        await context.bot.send_message(
+            uid,
+            f"{win_message}\nИзменение рейтинга: {_format_rating_change(uid)}",
+        )
     for uid in human_losers:
-        await context.bot.send_message(uid, lose_message)
+        await context.bot.send_message(
+            uid,
+            f"{lose_message}\nИзменение рейтинга: {_format_rating_change(uid)}",
+        )
 
 
 async def _register_clean_if_human(user_id: int, context):

@@ -36,21 +36,28 @@ def get_profile(user_id):
 
 
 def update_ratings(winners, losers):
+    deltas: dict[int, int] = {}
+
     for uid in winners:
         uid_str = str(uid)
         if uid_str not in globals.ratings:
             globals.ratings[uid_str] = {"rating": 1000, "wins": 0, "losses": 0}
-        globals.ratings[uid_str]["rating"] += 25
+        before = globals.ratings[uid_str]["rating"]
+        globals.ratings[uid_str]["rating"] = before + 25
         globals.ratings[uid_str]["wins"] += 1
+        deltas[int(uid)] = globals.ratings[uid_str]["rating"] - before
 
     for uid in losers:
         uid_str = str(uid)
         if uid_str not in globals.ratings:
             globals.ratings[uid_str] = {"rating": 1000, "wins": 0, "losses": 0}
-        globals.ratings[uid_str]["rating"] = max(0, globals.ratings[uid_str]["rating"] - 25)
+        before = globals.ratings[uid_str]["rating"]
+        globals.ratings[uid_str]["rating"] = max(0, before - 25)
         globals.ratings[uid_str]["losses"] += 1
+        deltas[int(uid)] = globals.ratings[uid_str]["rating"] - before
 
     save_ratings()
+    return deltas
 
 
 MATCHES_FILE = "matches.json"
