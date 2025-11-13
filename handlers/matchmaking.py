@@ -518,18 +518,18 @@ async def handle_match_actions(update, context):
                     )
 
                 for pid in match['players']:
-                if pid == leader_id or is_bot_player(pid):
-                    continue
+                    if pid == leader_id or is_bot_player(pid):
+                        continue
 
-                if pid == red_captain:
-                    note = "Матч начался! Ожидаем подтверждение результата после отчёта лидера."
-                else:
-                    note = "Матч начался! Ждём отчёта от лидера лобби."
+                    if pid == red_captain:
+                        note = "Матч начался! Ожидаем подтверждение результата после отчёта лидера."
+                    else:
+                        note = "Матч начался! Ждём отчёта от лидера лобби."
 
-                try:
-                    await context.bot.send_message(pid, note)
-                except TelegramError:
-                    pass
+                    try:
+                        await context.bot.send_message(pid, note)
+                    except TelegramError:
+                        pass
     
     elif data.startswith("cancel_"):
         match_id = data.split("_", 1)[1]
@@ -731,36 +731,36 @@ async def autoconfirm_winner_later(context):
     await _finalize_match_result(match_id, context, reason="timeout")
 
 
-    async def _finalize_match_result(match_id: str, context, *, reason: str | None = None):
-        match = globals.active_matches.pop(match_id, None)
-        if not match or not match.get("winner"):
-            return
+async def _finalize_match_result(match_id: str, context, *, reason: str | None = None):
+    match = globals.active_matches.pop(match_id, None)
+    if not match or not match.get("winner"):
+        return
 
-        globals.pending_results.pop(match_id, None)
+    globals.pending_results.pop(match_id, None)
 
-        _clear_waiting_lobby_ids(match_id)
+    _clear_waiting_lobby_ids(match_id)
 
-        job = globals.match_reminders.pop(match_id, None)
-        if job:
-            job.schedule_removal()
-        
-        winner_info = match["winner"]
-        winners: list[int]
-        losers: list[int]
-        winner_side = None
+    job = globals.match_reminders.pop(match_id, None)
+    if job:
+        job.schedule_removal()
 
-        if match.get("mode") == "5v5" and isinstance(winner_info, dict):
-            winner_side = winner_info.get("side")
-            teams = match.get("teams", {})
-            winners = [int(pid) for pid in teams.get(winner_side, [])]
-            loser_side = "red" if winner_side == "blue" else "blue"
-            losers = [int(pid) for pid in teams.get(loser_side, [])]
-        else:
-            winner_id = int(winner_info)
-            winners = [winner_id]
-            losers = [int(pid) for pid in match.get("players", []) if int(pid) != winner_id]
+    winner_info = match["winner"]
+    winners: list[int]
+    losers: list[int]
+    winner_side = None
 
-        if not winners or not losers:
+    if match.get("mode") == "5v5" and isinstance(winner_info, dict):
+        winner_side = winner_info.get("side")
+        teams = match.get("teams", {})
+        winners = [int(pid) for pid in teams.get(winner_side, [])]
+        loser_side = "red" if winner_side == "blue" else "blue"
+        losers = [int(pid) for pid in teams.get(loser_side, [])]
+    else:
+        winner_id = int(winner_info)
+        winners = [winner_id]
+        losers = [int(pid) for pid in match.get("players", []) if int(pid) != winner_id]
+
+    if not winners or not losers:
         return
 
     update_ratings(winners, losers)
