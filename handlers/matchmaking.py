@@ -590,26 +590,26 @@ async def handle_match_actions(update, context):
                 user_id, "🚫 Вы были временно забанены за отказы.")
 
     elif data.startswith("request_lobby_"):
-    match_id = data.split("_", 2)[2]
-    match = globals.active_matches.get(match_id)
-    if not match:
-        return
+        match_id = data.split("_", 2)[2]
+        match = globals.active_matches.get(match_id)
+        if not match:
+            return
 
-    roles = match.get("team_roles", {})
-    leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
+        roles = match.get("team_roles", {})
+        leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
 
-    if not leader_id or int(leader_id) != int(user_id):
-        return
+        if not leader_id or int(leader_id) != int(user_id):
+            return
 
-    globals.waiting_lobby_id[int(user_id)] = (match_id, "blue")
+        globals.waiting_lobby_id[int(user_id)] = (match_id, "blue")
 
-    try:
-        await context.bot.send_message(
-            user_id,
-            "Пришли ID лобби ответным сообщением (только цифры).",
-        )
-    except TelegramError:
-        pass
+        try:
+            await context.bot.send_message(
+                user_id,
+                "Пришли ID лобби ответным сообщением (только цифры).",
+            )
+        except TelegramError:
+            pass
 
 
 async def handle_result_confirmation(update, context):
