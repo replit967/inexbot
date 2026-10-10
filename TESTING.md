@@ -10,6 +10,14 @@ This branch is an isolated testing code line. It does not change `main` and does
 - Keep test accounts, chats, ratings, matches, bans, and other JSON data separate from any real bot data.
 - Do not merge this branch or the existing pull request into `main` until the test checklist has been reviewed.
 
+## GitHub Codespaces setup
+
+The `.devcontainer/devcontainer.json` file selects Python 3.10 and installs the runtime dependencies when the container is created.
+
+After adding or changing a Codespaces secret, stop and restart the Codespace so the environment can receive the secret. If the Codespace was created before `.devcontainer/devcontainer.json` was added, use the Codespaces command palette to run **Codespaces: Rebuild Container**. This rebuild may take several minutes.
+
+After rebuilding, check that the Python version is 3.10 and that the `BOT_TOKEN` environment variable exists without printing its value. Never run commands such as `echo $BOT_TOKEN`, and never paste the token into chat or source files.
+
 ## Setup
 
 1. Create a test bot in Telegram with `@BotFather` and copy its token.
