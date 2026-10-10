@@ -487,6 +487,8 @@ async def handle_match_actions(update, context):
         match = globals.active_matches.get(match_id)
         if not match:
             return
+        if user_id not in match.get("players", []):
+            return
 
         match['ready'].add(user_id)
         await query.edit_message_text("✅ Вы подтвердили участие!")
@@ -553,9 +555,10 @@ async def handle_match_actions(update, context):
     
     elif data.startswith("cancel_"):
         match_id = data.split("_", 1)[1]
-        match = globals.active_matches.pop(match_id, None)
-        if not match:
+        match = globals.active_matches.get(match_id)
+        if not match or user_id not in match.get("players", []):
             return
+        globals.active_matches.pop(match_id, None)
 
         _clear_waiting_lobby_ids(match_id)
         
@@ -629,7 +632,14 @@ async def handle_result_confirmation(update, context):
         if not match:
             return
 
-        if match.get('mode') == '5v5' and role in {"blue", "red"}:
+        if match.get('mode') == '5v5':
+            if role not in {"blue", "red"}:
+                return
+            roles = match.get("team_roles", {})
+            leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
+            if not leader_id or int(user_id) != int(leader_id):
+                return
+
             winners_side = role
             losers_side = "red" if winners_side == "blue" else "blue"
             match['winner'] = {"side": winners_side, "reporter": user_id}
@@ -640,7 +650,6 @@ async def handle_result_confirmation(update, context):
                 "loser_side": losers_side,
             }
 
-            roles = match.get("team_roles", {})
             teams = match.get("teams", {})
 
             confirm_candidates = []
@@ -672,6 +681,7 @@ async def handle_result_confirmation(update, context):
                 job.schedule_removal()
 
             if confirm_target and not is_bot_player(confirm_target):
+                match["result_confirmation_user_id"] = int(confirm_target)
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("Подтвердить", callback_data=f"confirm_win_{match_id}")],
                     [InlineKeyboardButton("Оспорить", callback_data=f"reject_win_{match_id}")],
@@ -697,7 +707,13 @@ async def handle_result_confirmation(update, context):
 
             return
         
-        players = match['players']
+        if match.get("mode") != "1v1":
+            return
+        players = match.get("players", [])
+        if len(players) != 2 or role not in {"leader", "opponent"}:
+            return
+        if int(user_id) != int(players[0]):
+            return
         winner = players[0] if role == "leader" else players[1]
         loser = players[1] if role == "leader" else players[0]
 
@@ -711,6 +727,7 @@ async def handle_result_confirmation(update, context):
             await _finalize_match_result(match_id, context, reason="bot_auto")
             return
             
+        match["result_confirmation_user_id"] = int(loser)
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("Подтвердить", callback_data=f"confirm_win_{match_id}")],
             [InlineKeyboardButton("Оспорить", callback_data=f"reject_win_{match_id}")]
@@ -733,15 +750,18 @@ async def handle_result_confirmation(update, context):
         match = globals.active_matches.get(match_id)
         if not match or not match.get("winner"):
             return
+        if int(match.get("result_confirmation_user_id", -1)) != int(user_id):
+            return
 
         match.setdefault('confirmed', set()).add(user_id)
         await _finalize_match_result(match_id, context)
 
     elif data.startswith("reject_win_"):
         match_id = data.split("_", 2)[2]
-        match = globals.active_matches.pop(match_id, None)
-        if not match:
+        match = globals.active_matches.get(match_id)
+        if not match or int(match.get("result_confirmation_user_id", -1)) != int(user_id):
             return
+        globals.active_matches.pop(match_id, None)
 
         _clear_waiting_lobby_ids(match_id)
 
