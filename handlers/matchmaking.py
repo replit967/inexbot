@@ -205,6 +205,7 @@ async def prepare_5v5_match(
 
     match_record = {
         "players": player_ids,
+        "queue_entries": [dict(p) for p in blue_players + red_players],
         "ready": set(),
         "mode": "5v5",
         "winner": None,
@@ -361,6 +362,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
 
                 globals.active_matches[match_id] = {
                     'players': [p1_id, p2_id],
+                    'queue_entries': [dict(p1), dict(p2)],
                     'ready': set(),
                     'mode': '1v1',
                     'winner': None,
@@ -566,22 +568,66 @@ async def handle_match_actions(update, context):
         if job:
             job.schedule_removal()
 
-        for pid in match['players']:
-            if pid != user_id:
+        queue = globals.queue_1v1 if match.get("mode") == "1v1" else globals.queue_5v5
+        entries_by_id = {
+            int(entry["user_id"]): dict(entry)
+            for entry in match.get("queue_entries", [])
+            if isinstance(entry, dict) and entry.get("user_id") is not None
+        }
+
+        for pid in match.get("players", []):
+            pid = int(pid)
+            if pid == int(user_id):
+                continue
+
+            try:
+                await context.bot.send_message(
+                    pid,
+                    "⚠️ Матч отменён другим игроком. Возврат в очередь.")
+            except TelegramError:
+                pass
+
+            entry = entries_by_id.get(pid, {
+                "user_id": pid,
+                "elo": get_rating(pid),
+                "joined_at": time.time(),
+                "chat_id": pid,
+                "notify_message_id": None,
+            })
+            entry["user_id"] = pid
+            entry["elo"] = get_rating(pid)
+            entry.setdefault("joined_at", time.time())
+            entry.setdefault("chat_id", pid)
+            entry.setdefault("notify_message_id", None)
+            entry["reminder_message_id"] = None
+
+            if not any(int(p.get("user_id", -1)) == pid for p in queue):
+                queue.append(entry)
+
+            old_job = globals.search_jobs.pop(pid, None)
+            if old_job:
+                old_job.schedule_removal()
+
+            job = context.job_queue.run_repeating(
+                globals.send_search_reminder,
+                interval=60,
+                first=60,
+                data={"user_id": pid, "chat_id": entry["chat_id"]},
+            )
+            globals.search_jobs[pid] = job
+
+            if entry.get("notify_message_id"):
                 try:
-                    await context.bot.send_message(
-                        pid,
-                        "⚠️ Матч отменён другим игроком. Возврат в очередь.")
+                    await context.bot.edit_message_text(
+                        chat_id=entry["chat_id"],
+                        message_id=entry["notify_message_id"],
+                        text="🛡 Ожидание команды..." if match.get("mode") == "5v5" else "🔍 Поиск соперника...",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("🚪 Выйти из очереди 🚪", callback_data="leave_queue")
+                        ]]),
+                    )
                 except TelegramError:
                     pass
-
-                queue = globals.queue_1v1 if match[
-                    "mode"] == "1v1" else globals.queue_5v5
-                queue.append({
-                    "user_id": pid,
-                    "elo": get_rating(pid),
-                    "joined_at": time.time()
-                })
 
         await query.edit_message_text("❌ Матч отменён.")
         result = await register_infraction(user_id, "afk", context)
