@@ -25,7 +25,7 @@ class MatchFinalizeNotificationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.ratings = self.ratings_patch.start()
         self.history = self.history_patch.start()
         self.patches = [
-            patch("handlers.matchmaking.get_rating", side_effect=lambda uid: 1025 if uid in (101, 102, 103, 104, 105) else 975),
+            patch("handlers.matchmaking.get_rating", side_effect=lambda uid, mode=None: 1025 if uid in (101, 102, 103, 104, 105) else 975),
             patch("handlers.matchmaking._register_clean_if_human", new_callable=AsyncMock),
         ]
         for item in self.patches:
