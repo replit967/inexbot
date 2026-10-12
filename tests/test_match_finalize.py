@@ -22,7 +22,7 @@ class MatchFinalizationTests(unittest.IsolatedAsyncioTestCase):
         self.history_mock = self.history.start()
         self.patches = [
             patch("handlers.matchmaking.update_ratings", return_value={101: 25, 202: -25}),
-            patch("handlers.matchmaking.get_rating", side_effect=lambda uid: 1025 if uid == 101 else 975),
+            patch("handlers.matchmaking.get_rating", side_effect=lambda uid, mode=None: 1025 if uid == 101 else 975),
             patch("handlers.matchmaking._register_clean_if_human", new_callable=AsyncMock),
         ]
         for item in self.patches:
