@@ -47,7 +47,7 @@ class RatingPersistenceTests(unittest.TestCase):
         rating.update_ratings([202], [101], mode="5v5")
 
         self.assertEqual(rating.get_profile(101, "1v1"), {"rating": 1025, "wins": 1, "losses": 0})
-        self.assertEqual(rating.get_profile(101, "5v5"), {"rating": 1000, "wins": 0, "losses": 1})
+        self.assertEqual(rating.get_profile(101, "5v5"), {"rating": 975, "wins": 0, "losses": 1})
         self.assertEqual(rating.get_profile(202, "1v1"), {"rating": 975, "wins": 0, "losses": 1})
         self.assertEqual(rating.get_profile(202, "5v5"), {"rating": 1025, "wins": 1, "losses": 0})
 
