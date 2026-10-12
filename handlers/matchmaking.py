@@ -400,10 +400,28 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
 
                 except TelegramError:
                     globals.active_matches.pop(match_id, None)
-                    globals.queue_1v1.extend([
-                        {"user_id": p1_id, "elo": elo1, "joined_at": p1['joined_at']},
-                        {"user_id": p2_id, "elo": elo2, "joined_at": p2['joined_at']}
-                    ])
+                    for player in (p1, p2):
+                        restored = dict(player)
+                        restored["elo"] = get_rating(restored["user_id"])
+                        restored["reminder_message_id"] = None
+                        if not any(
+                            int(item.get("user_id", -1)) == int(restored["user_id"])
+                            for item in globals.queue_1v1
+                        ):
+                            globals.queue_1v1.append(restored)
+
+                        pid = int(restored["user_id"])
+                        old_job = globals.search_jobs.pop(pid, None)
+                        if old_job:
+                            old_job.schedule_removal()
+                        chat_id_for_job = restored.get("chat_id", pid)
+                        new_job = context.job_queue.run_repeating(
+                            globals.send_search_reminder,
+                            interval=60,
+                            first=60,
+                            data={"user_id": pid, "chat_id": chat_id_for_job},
+                        )
+                        globals.search_jobs[pid] = new_job
                 return
 
     for player in globals.queue_1v1:
