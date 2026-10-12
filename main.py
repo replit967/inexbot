@@ -36,6 +36,8 @@ from handlers.admin import (
     ban_command,
     unban_command,
     clear_reports_command,
+    shutdown_command,
+    handle_shutdown_confirmation,
     debug_fill_5v5,
     debug_reset_ratings,
 )
@@ -67,7 +69,7 @@ async def debug_mention(update, context):
     await update.message.reply_text(html, parse_mode="HTML")
 
 
-# ✅ Унифицированная загрузка всех данных
+# Загрузка всех данных
 def load_all_data():
     load_trust()
     load_infractions()
@@ -80,13 +82,11 @@ def load_all_data():
     logger.info("✅ Все данные успешно загружены")
 
 
-# 📅 Фоновая задача матчмейкинга + сброса варнов
 async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
     global last_reset
     now = int(time.time())
 
     try:
-        # Эти функции — async, поэтому await тут корректен внутри job queue
         await find_match_1v1(context)
         await find_match_5v5(context)
 
@@ -97,7 +97,6 @@ async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
             save_infractions()
             last_reset = now
             logger.info("🔁 Предупреждения обнулены")
-
     except Exception:
         logger.exception("❌ Ошибка в matchmaking_job")
 
@@ -113,8 +112,6 @@ def main():
         .concurrent_updates(True) \
         .build()
 
-    
-    # Делаем приложение доступным из других модулей
     globals.app = app
     globals.job_queue = app.job_queue
 
@@ -138,13 +135,13 @@ def main():
         ("ban", ban_command),
         ("unban", unban_command),
         ("clearreports", clear_reports_command),
+        ("shutdown", shutdown_command),
         ("debug_fill_5v5", debug_fill_5v5),
         ("reset_ratings", debug_reset_ratings),
     ]
     for cmd, handler in ADMIN_COMMANDS:
-        app.add_handler(CommandHandler(cmd, handler))
+        app.add_handler(CommandHandler(cmd, handler, filters=filters.ChatType.PRIVATE))
 
-    # Ввод ID лобби через личные сообщения
     app.add_handler(
         MessageHandler(
             filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND,
@@ -153,20 +150,18 @@ def main():
     )
 
     # Кнопки
+    app.add_handler(CallbackQueryHandler(handle_shutdown_confirmation, pattern="^shutdown_(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(handle_mode_choice, pattern="^mode_"))
     app.add_handler(CallbackQueryHandler(handle_leave_queue, pattern="^leave_"))
     app.add_handler(CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel)_"))
     app.add_handler(CallbackQueryHandler(handle_result_confirmation, pattern="^(report_win|confirm_win|reject_win)_"))
 
     app.add_handler(CommandHandler("debug_mention", debug_mention, filters=filters.ChatType.GROUPS))
-    
 
     from telegram.error import TelegramError, NetworkError
 
     async def _log_errors(update, context):
-        # Подробный лог в консоль
         logger.exception("⚠️ Exception in handler", exc_info=context.error)
-        # Опционально — шлём админу в личку текст ошибки Телеграма
         if isinstance(context.error, NetworkError) and isinstance(context.error.__cause__, ReadError):
             return
         if isinstance(context.error, TelegramError):
@@ -181,28 +176,22 @@ def main():
 
     app.add_error_handler(_log_errors)
 
-    
-    
     async def _drop_commands_in_groups(update, context):
         try:
             await update.effective_message.delete()
         except Exception:
             pass
 
-# Любые /команды в группах — удаляем
     app.add_handler(
         MessageHandler(filters.COMMAND & filters.ChatType.GROUPS, _drop_commands_in_groups),
         group=1
     )
 
-    # Фоновая задача
     app.job_queue.run_repeating(matchmaking_job, interval=30, first=0)
 
-    # Запуск (синхронный; сам управляет event loop'ом)
     app.run_polling(
         allowed_updates=["message", "chat_member", "callback_query", "my_chat_member"]
     )
-
 
 
 if __name__ == "__main__":
