@@ -71,6 +71,20 @@ def load_match_state() -> bool:
             if not isinstance(match, dict):
                 raise ValueError("Each active match must be an object")
             for key in ("ready", "confirmed"):
+                value = match.get(key, [])
+                if not isinstance(value, (list, set)):
+                    raise ValueError(f"Match {key} data must be a list")
+            roles = match.get("team_roles", {})
+            if not isinstance(roles, dict):
+                raise ValueError("Match team_roles must be an object")
+            for side in ("blue", "red"):
+                side_roles = roles.get(side, {})
+                if not isinstance(side_roles, dict):
+                    raise ValueError("Match side roles must be objects")
+
+        # Convert JSON arrays to sets only after validating the full snapshot.
+        for match in active.values():
+            for key in ("ready", "confirmed"):
                 if isinstance(match.get(key), list):
                     match[key] = set(match[key])
 
