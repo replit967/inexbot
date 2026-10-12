@@ -427,6 +427,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
                             data={"user_id": pid, "chat_id": chat_id_for_job},
                         )
                         globals.search_jobs[pid] = new_job
+                    save_match_state()
                 return
 
     for player in globals.queue_1v1:
