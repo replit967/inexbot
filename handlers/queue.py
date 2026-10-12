@@ -90,7 +90,7 @@ async def handle_mode_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Добавим игрока в очередь
     entry = {
         "user_id": user_id,
-        "elo": get_rating(user_id),
+        "elo": get_rating(user_id, "1v1" if is_1v1 else "5v5"),
         "joined_at": now,
         "chat_id": query.message.chat_id,
         "notify_message_id": search_msg.message_id,
