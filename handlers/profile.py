@@ -233,6 +233,28 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+async def rating_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from core.rating import get_rating_history
+
+    mode = context.args[0].lower() if context.args else "1v1"
+    if mode not in ("1v1", "5v5"):
+        await update.message.reply_text("Использование: /ratinghistory [1v1|5v5]")
+        return
+
+    entries = get_rating_history(update.effective_user.id, mode, limit=10)
+    if not entries:
+        await update.message.reply_text(
+            f"📉 История рейтинга {mode} пока пуста. Она начнёт собираться после следующих матчей."
+        )
+        return
+
+    lines = [f"📈 История рейтинга {mode} (последние {len(entries)} изменений):", ""]
+    for entry in reversed(entries):
+        timestamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry["timestamp"]))
+        lines.append(f"• {timestamp} · {entry['rating']} ELO")
+    await update.message.reply_text("\\n".join(lines))
+
+
 async def player_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show public INEXmode stats for an exact registered nickname."""
     import html
