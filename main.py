@@ -28,7 +28,7 @@ from core.names import load_names, load_nick_timestamps
 from handlers.profile import start, profile, top, trust, history, set_name, set_mlbb_id, player_lookup, rating_history
 from handlers.report import report_command, load_report_log
 from handlers.queue import find, handle_mode_choice, handle_leave_queue
-from handlers.menu import handle_menu
+from handlers.menu import handle_menu, handle_menu_callback
 from handlers.matchmaking import (
     handle_match_actions,
     handle_result_confirmation,
@@ -171,6 +171,7 @@ def main():
 
     # Кнопки
     app.add_handler(CallbackQueryHandler(handle_shutdown_confirmation, pattern="^shutdown_(confirm|cancel)$"))
+    app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu_history_(1v1|5v5)$"))
     app.add_handler(CallbackQueryHandler(handle_mode_choice, pattern="^mode_"))
     app.add_handler(CallbackQueryHandler(handle_leave_queue, pattern="^leave_"))
     app.add_handler(CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel)_"))
