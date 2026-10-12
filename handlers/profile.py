@@ -87,34 +87,40 @@ async def set_mlbb_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from core.names import get_display_name
     import html
+    from core.names import get_display_name
 
     user = update.effective_user
     cache_username(user)
+    mode = context.args[0].lower() if context.args else "1v1"
+    if mode not in ("1v1", "5v5"):
+        await update.message.reply_text("Использование: /top [1v1|5v5]")
+        return
+
+    def mode_stats(data):
+        stats = data.get("modes", {}).get(mode)
+        if stats is not None:
+            return stats
+        # Legacy players keep their old ELO until their first result in this mode.
+        return {"rating": data.get("rating", 1000), "wins": 0, "losses": 0}
 
     top_players = sorted(
         globals.ratings.items(),
-        key=lambda x: x[1].get("rating", 1000),
-        reverse=True
+        key=lambda item: mode_stats(item[1]).get("rating", 1000),
+        reverse=True,
     )[:10]
 
-    message = "🏆 Топ 10 игроков:\n\n"
-
+    message = f"🏆 Топ 10 игроков | {mode}\n\n"
     for index, (uid_str, data) in enumerate(top_players, start=1):
         uid = int(uid_str)
-        name = get_display_name(uid)
-        name = html.escape(name)  # экранируем спецсимволы для HTML
-        rating = data.get("rating", 1000)
-
+        name = html.escape(get_display_name(uid))
+        rating_value = mode_stats(data).get("rating", 1000)
+        wins = mode_stats(data).get("wins", 0)
+        losses = mode_stats(data).get("losses", 0)
         name_with_link = f"<a href='tg://user?id={uid}'>{name}</a>"
-        message += f"{index}. {name_with_link} ({rating} ELO)\n"
+        message += f"{index}. {name_with_link} · {rating_value} ELO · {wins}W/{losses}L\n"
 
-    # ⚠ Пояснение для всех пользователей
-    message += (
-        "\n🔒 Ссылка может не работать, если игрок ограничил приватность в Telegram"
-    )
-
+    message += "\nРежим: /top 1v1 или /top 5v5"
     await update.message.reply_text(message, parse_mode=ParseMode.HTML)
 
 
