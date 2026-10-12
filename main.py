@@ -20,6 +20,7 @@ from core.trust import load_trust
 from core.infractions import load_infractions, reset_daily_warnings
 from core.rating import load_ratings, load_matches
 from core.match_state import load_match_state
+from core.match_jobs import restore_matchmaking_jobs
 from core.bans import load_bans
 from core.names import load_names, load_nick_timestamps
 
@@ -114,28 +115,16 @@ def main():
     load_all_data()
 
     # Recreate volatile JobQueue tasks after restoring the durable snapshot.
-    for queue in (globals.queue_1v1, globals.queue_5v5):
-        for player in queue:
-            uid = int(player.get("user_id", 0))
-            if not uid:
-                continue
-            chat_id = player.get("chat_id", uid)
-            job = app.job_queue.run_repeating(
-                globals.send_search_reminder,
-                interval=60,
-                first=60,
-                data={"user_id": uid, "chat_id": chat_id},
-            )
-            globals.search_jobs[uid] = job
-
     from handlers.matchmaking import autoconfirm_winner_later
-    for match_id, match in globals.active_matches.items():
-        if match.get("winner"):
-            globals.match_reminders[match_id] = app.job_queue.run_once(
-                autoconfirm_winner_later,
-                600,
-                data={"match_id": match_id},
-            )
+    restored_search_jobs, restored_match_reminders = restore_matchmaking_jobs(
+        app.job_queue,
+        (globals.queue_1v1, globals.queue_5v5),
+        globals.active_matches,
+        globals.send_search_reminder,
+        autoconfirm_winner_later,
+    )
+    globals.search_jobs.update(restored_search_jobs)
+    globals.match_reminders.update(restored_match_reminders)
 
     # Обычные команды
     app.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
