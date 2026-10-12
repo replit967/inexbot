@@ -267,4 +267,4 @@ async def player_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if trust_score is not None:
         lines.append(f"🛡 Trust Score: {trust_score}/100")
 
-    await update.message.reply_text("\\n".join(lines), parse_mode=ParseMode.HTML)
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
