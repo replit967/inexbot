@@ -513,7 +513,9 @@ async def handle_match_actions(update, context):
         match['ready'].add(user_id)
         await query.edit_message_text("✅ Вы подтвердили участие!")
 
-        if len(match['ready']) == len(match['players']):
+        if len(match['ready']) == len(match['players']) and not match.get("started", False):
+            # Set this before the next await so concurrent callbacks cannot start the match twice.
+            match["started"] = True
             job = globals.match_reminders.pop(match_id, None)
             if job:
                 job.schedule_removal()
