@@ -34,7 +34,7 @@ class MatchCancellationQueueTests(unittest.IsolatedAsyncioTestCase):
         self.infraction_patch = patch(
             "handlers.matchmaking.register_infraction", new_callable=AsyncMock, return_value="warn"
         )
-        self.rating_patch = patch("handlers.matchmaking.get_rating", side_effect=lambda uid: 1000 + int(uid))
+        self.rating_patch = patch("handlers.matchmaking.get_rating", side_effect=lambda uid, mode=None: 1000 + int(uid))
         self.infraction_patch.start()
         self.rating_patch.start()
 
