@@ -82,7 +82,7 @@ class MatchLifecycleIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("m1", globals.pending_results)
         self.assertEqual(globals.matches["m1"]["mode"], "1v1")
         self.assertEqual(globals.matches["m1"]["winner"], 101)
-        self.assertEqual(self.context.bot.send_message.await_count, 4)
+        self.assertEqual(self.context.bot.send_message.await_count, 3)
 
     async def test_5v5_report_confirm_finalizes_all_ten_players(self):
         players = list(range(1, 11))
