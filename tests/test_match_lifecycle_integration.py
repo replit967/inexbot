@@ -42,7 +42,7 @@ class MatchLifecycleIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def _save_history(self, match_id, data):
         globals.matches[match_id] = data
 
-    def _update_ratings(self, winners, losers):
+    def _update_ratings(self, winners, losers, mode=None):
         return {**{int(uid): 25 for uid in winners}, **{int(uid): -25 for uid in losers}}
 
     def tearDown(self):
