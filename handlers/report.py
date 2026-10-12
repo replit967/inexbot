@@ -6,11 +6,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from core.trust import recalculate_trust_score, save_trust
 from core import globals
+from config import REPORT_LOG_FILE
 
 
 def load_report_log():
     try:
-        with open("report_log.json", 'r') as f:
+        with open(REPORT_LOG_FILE, 'r') as f:
             globals.report_log = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         globals.report_log = {}
@@ -18,7 +19,7 @@ def load_report_log():
 
 
 def save_report_log():
-    with open("report_log.json", 'w') as f:
+    with open(REPORT_LOG_FILE, 'w') as f:
         json.dump(globals.report_log, f)
 
 
