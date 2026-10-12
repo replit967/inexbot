@@ -53,8 +53,8 @@ class MatchFinalizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(101, globals.waiting_lobby_id)
         self.assertEqual(self.history_mock.call_count, 1)
         self.assertEqual(self.history_mock.call_args.args[0], "m1")
-        self.assertEqual(self.history.call_args.args[1]["winner"], 101)
-        self.assertEqual(self.history.call_args.args[1]["mode"], "1v1")
+        self.assertEqual(self.history_mock.call_args.args[1]["winner"], 101)
+        self.assertEqual(self.history_mock.call_args.args[1]["mode"], "1v1")
 
     async def test_repeated_finalization_does_not_record_match_twice(self):
         globals.active_matches["m2"] = {
@@ -65,7 +65,7 @@ class MatchFinalizationTests(unittest.IsolatedAsyncioTestCase):
         }
         await matchmaking._finalize_match_result("m2", self.context)
         await matchmaking._finalize_match_result("m2", self.context)
-        self.assertEqual(self.history.call_count, 1)
+        self.assertEqual(self.history_mock.call_count, 1)
 
 
 if __name__ == "__main__":
