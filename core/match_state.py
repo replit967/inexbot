@@ -63,6 +63,8 @@ def load_match_state() -> bool:
         active, pending = snapshot.get("active_matches", {}), snapshot.get("pending_results", {})
         if not isinstance(q1, list) or not isinstance(q5, list):
             raise ValueError("Queue data must be lists")
+        if not all(isinstance(player, dict) for player in q1 + q5):
+            raise ValueError("Each queued player must be an object")
         if not isinstance(active, dict) or not isinstance(pending, dict):
             raise ValueError("Match data must be objects")
         for match in active.values():
