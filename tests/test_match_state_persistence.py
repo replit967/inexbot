@@ -80,6 +80,34 @@ class MatchStatePersistenceTests(unittest.TestCase):
         self.assertFalse(match_state.load_match_state())
         self.assertEqual(globals.queue_1v1, [{"user_id": 999}])
 
+    def test_malformed_queue_entry_does_not_overwrite_current_state(self):
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump({
+                "version": 1,
+                "queue_1v1": ["not-a-player-object"],
+                "queue_5v5": [],
+                "active_matches": {},
+                "pending_results": {},
+            }, handle)
+        globals.queue_1v1 = [{"user_id": 999}]
+        self.assertFalse(match_state.load_match_state())
+        self.assertEqual(globals.queue_1v1, [{"user_id": 999}])
+
+    def test_malformed_nested_match_roles_are_rejected(self):
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump({
+                "version": 1,
+                "queue_1v1": [],
+                "queue_5v5": [],
+                "active_matches": {
+                    "broken": {"mode": "5v5", "team_roles": ["invalid"]}
+                },
+                "pending_results": {},
+            }, handle)
+        globals.active_matches = {"existing": {"mode": "1v1"}}
+        self.assertFalse(match_state.load_match_state())
+        self.assertEqual(globals.active_matches, {"existing": {"mode": "1v1"}})
+
 
 if __name__ == "__main__":
     unittest.main()
