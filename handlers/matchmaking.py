@@ -859,6 +859,15 @@ async def autoconfirm_winner_later(context):
     await _finalize_match_result(match_id, context, reason="timeout")
 
 
+async def _send_match_result_message(context, user_id: int, text: str) -> bool:
+    """Send a post-result notification without undoing an already finalized match."""
+    try:
+        await context.bot.send_message(user_id, text)
+        return True
+    except TelegramError:
+        return False
+
+
 async def _finalize_match_result(match_id: str, context, *, reason: str | None = None):
     match = globals.active_matches.pop(match_id, None)
     if not match or not match.get("winner"):
@@ -913,15 +922,15 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     if reason == "timeout":
         for uid in human_winners:
             await _register_clean_if_human(uid, context)
-            await context.bot.send_message(
-                uid,
+            await _send_match_result_message(
+                context, uid,
                 "⏱ Победа засчитана автоматически.\n"
                 f"Изменение рейтинга: {_format_rating_change(uid)}",
             )
         for uid in human_losers:
             await _register_infraction_if_human(uid, "afk", context)
-            await context.bot.send_message(
-                uid,
+            await _send_match_result_message(
+                context, uid,
                 "⚠️ Вы не подтвердили матч — засчитано поражение.\n"
                 f"Изменение рейтинга: {_format_rating_change(uid)}",
             )
@@ -934,8 +943,8 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         for uid in human_losers:
             await _register_clean_if_human(uid, context)
         for uid in human_winners:
-            await context.bot.send_message(
-                uid,
+            await _send_match_result_message(
+                context, uid,
                 "🤖 Победа подтверждена автоматически — соперник был ботом.\n"
                 f"Изменение рейтинга: {_format_rating_change(uid)}",
             )
@@ -953,13 +962,13 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         lose_message = "👍 Вы подтвердили поражение."
 
     for uid in human_winners:
-        await context.bot.send_message(
-            uid,
+        await _send_match_result_message(
+            context, uid,
             f"{win_message}\nИзменение рейтинга: {_format_rating_change(uid)}",
         )
     for uid in human_losers:
-        await context.bot.send_message(
-            uid,
+        await _send_match_result_message(
+            context, uid,
             f"{lose_message}\nИзменение рейтинга: {_format_rating_change(uid)}",
         )
 
