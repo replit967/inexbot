@@ -67,6 +67,8 @@ def load_match_state() -> bool:
             raise ValueError("Each queued player must be an object")
         if not isinstance(active, dict) or not isinstance(pending, dict):
             raise ValueError("Match data must be objects")
+        if not all(isinstance(result, dict) for result in pending.values()):
+            raise ValueError("Each pending result must be an object")
         for match in active.values():
             if not isinstance(match, dict):
                 raise ValueError("Each active match must be an object")
