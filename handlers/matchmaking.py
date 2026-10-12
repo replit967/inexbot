@@ -618,7 +618,7 @@ async def handle_match_actions(update, context):
 
             entry = entries_by_id.get(pid, {
                 "user_id": pid,
-                "elo": get_rating(pid, "1v1"),
+                "elo": get_rating(pid, match.get("mode", "1v1")),
                 "joined_at": time.time(),
                 "chat_id": pid,
                 "notify_message_id": None,
