@@ -37,5 +37,8 @@ jobs:
           python -c "import core.globals, core.trust, core.infractions, core.rating, core.bans, core.names"
           python -c "import handlers.profile, handlers.report, handlers.queue, handlers.matchmaking, handlers.admin"
 
+      - name: Import main application without starting polling
+        run: BOT_TOKEN=ci-dummy-token python -c "import main; print('Main application import OK; polling was not started.')"
+
       - name: Run authorization tests
         run: python -m unittest discover -s tests -v
