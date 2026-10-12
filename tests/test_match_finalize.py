@@ -18,9 +18,10 @@ class MatchFinalizationTests(unittest.IsolatedAsyncioTestCase):
         globals.match_reminders = {}
         globals.BOT_PLAYER_IDS = set()
         self.context = type("Context", (), {"bot": type("Bot", (), {"send_message": AsyncMock()})()})()
+        self.history = patch("handlers.matchmaking.add_match_history")
+        self.history_mock = self.history.start()
         self.patches = [
             patch("handlers.matchmaking.update_ratings", return_value={101: 25, 202: -25}),
-            patch("handlers.matchmaking.add_match_history") as self.history,
             patch("handlers.matchmaking.get_rating", side_effect=lambda uid: 1025 if uid == 101 else 975),
             patch("handlers.matchmaking._register_clean_if_human", new_callable=AsyncMock),
         ]
@@ -30,6 +31,7 @@ class MatchFinalizationTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         for item in reversed(self.patches):
             item.stop()
+        self.history.stop()
         globals.active_matches = self.old_matches
         globals.pending_results = self.old_pending
         globals.waiting_lobby_id = self.old_waiting
@@ -49,8 +51,8 @@ class MatchFinalizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("m1", globals.active_matches)
         self.assertNotIn("m1", globals.pending_results)
         self.assertNotIn(101, globals.waiting_lobby_id)
-        self.assertEqual(self.history.call_count, 1)
-        self.assertEqual(self.history.call_args.args[0], "m1")
+        self.assertEqual(self.history_mock.call_count, 1)
+        self.assertEqual(self.history_mock.call_args.args[0], "m1")
         self.assertEqual(self.history.call_args.args[1]["winner"], 101)
         self.assertEqual(self.history.call_args.args[1]["mode"], "1v1")
 
