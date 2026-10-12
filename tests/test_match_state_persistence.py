@@ -93,6 +93,20 @@ class MatchStatePersistenceTests(unittest.TestCase):
         self.assertFalse(match_state.load_match_state())
         self.assertEqual(globals.queue_1v1, [{"user_id": 999}])
 
+    def test_malformed_pending_result_does_not_overwrite_current_state(self):
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump({
+                "version": 1,
+                "queue_1v1": [],
+                "queue_5v5": [],
+                "active_matches": {},
+                "pending_results": {"broken": ["invalid"]},
+            }, handle)
+        globals.pending_results = {"existing": {"winner": 999}}
+        self.assertFalse(match_state.load_match_state())
+        self.assertEqual(globals.pending_results, {"existing": {"winner": 999}})
+
+
     def test_malformed_nested_match_roles_are_rejected(self):
         with open(self.path, "w", encoding="utf-8") as handle:
             json.dump({
