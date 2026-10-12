@@ -108,3 +108,38 @@ class InfractionPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DailyWarningResetTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.temp_dir.name, "infractions.json")
+        self.old_infractions = globals.infractions
+        globals.infractions = {
+            "old": {"warnings": 4, "strikes": 2, "clean_games": 0, "last_reset": 1000},
+            "fresh": {"warnings": 2, "strikes": 1, "clean_games": 0, "last_reset": 85000},
+        }
+        self.file_patch = patch("core.infractions.INFRACTIONS_FILE", self.path)
+        self.file_patch.start()
+
+    def tearDown(self):
+        self.file_patch.stop()
+        globals.infractions = self.old_infractions
+        self.temp_dir.cleanup()
+
+    def test_only_users_whose_persisted_window_elapsed_are_reset(self):
+        changed = infractions.reset_daily_warnings(now=87401)
+        self.assertTrue(changed)
+        self.assertEqual(globals.infractions["old"]["warnings"], 0)
+        self.assertEqual(globals.infractions["old"]["strikes"], 0)
+        self.assertEqual(globals.infractions["old"]["last_reset"], 87401)
+        self.assertEqual(globals.infractions["fresh"]["warnings"], 2)
+        self.assertEqual(globals.infractions["fresh"]["strikes"], 1)
+        with open(self.path, encoding="utf-8") as file:
+            self.assertEqual(json.load(file)["old"]["warnings"], 0)
+
+    def test_no_reset_before_24_hours_and_no_unneeded_write(self):
+        changed = infractions.reset_daily_warnings(now=80000)
+        self.assertFalse(changed)
+        self.assertFalse(os.path.exists(self.path))
+
