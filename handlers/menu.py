@@ -48,6 +48,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("🔎 Введи точный ник игрока, чтобы открыть его публичный профиль.")
     elif action == "🏠 Главное меню":
         await start(update, context)
+    elif action == "🚩 Пожаловаться":
+        await message.reply_text(
+            "🚩 Чтобы отправить жалобу, используй формат:\\n"
+            '/report "ник или Telegram ID" причина\\n\\n'
+            'Пример: /report "Player One" оскорбления'
+        )
     elif action == "⚙️ Настройки":
         await message.reply_text(
             "⚙️ Настройки профиля\n\n"
