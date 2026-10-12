@@ -222,3 +222,49 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_nick_timestamps()
 
     await update.message.reply_text(f"✅ Ваш ник установлен: {new_name}")
+
+
+
+async def player_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show public INEXmode stats for an exact registered nickname."""
+    import html
+
+    query = " ".join(context.args).strip()
+    if not query:
+        await update.message.reply_text("Использование: /player <ник игрока>")
+        return
+
+    matches = [
+        uid for uid, nickname in globals.names.items()
+        if nickname.casefold() == query.casefold()
+    ]
+    if not matches:
+        await update.message.reply_text("Игрок с таким ником не найден.")
+        return
+    if len(matches) > 1:
+        await update.message.reply_text("Найдено несколько профилей с таким ником. Уточните запрос.")
+        return
+
+    uid = str(matches[0])
+    nickname = globals.names[uid]
+    stats = get_profile(uid)
+    total = stats["wins"] + stats["losses"]
+    win_rate = round(stats["wins"] * 100 / total, 1) if total else 0
+    mlbb = globals.mlbb_profiles.get(uid)
+    linked_status = "привязан, не подтверждён" if mlbb else "не привязан"
+    trust_data = globals.trust_data.get(uid, {})
+    trust_score = trust_data.get("trust_score")
+
+    lines = [
+        f"👤 Профиль INEXmode: {html.escape(nickname)}",
+        "",
+        f"🏆 ELO: {stats['rating']}",
+        f"✅ Побед: {stats['wins']}",
+        f"❌ Поражений: {stats['losses']}",
+        f"📈 Винрейт: {win_rate}% ({total} матчей)",
+        f"🎮 MLBB аккаунт: {linked_status}",
+    ]
+    if trust_score is not None:
+        lines.append(f"🛡 Trust Score: {trust_score}/100")
+
+    await update.message.reply_text("\\n".join(lines), parse_mode=ParseMode.HTML)
