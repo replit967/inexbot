@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 from core import globals
 from core.rating import update_ratings, get_rating, add_match_history
+from core.match_state import save_match_state
 from core.infractions import register_clean_game, register_infraction
 from telegram.ext import ContextTypes
 
@@ -218,6 +219,7 @@ async def prepare_5v5_match(
     }
 
     globals.active_matches[match_id] = match_record
+    save_match_state()
     _set_lobby_leaders_waiting(match_id, roles)
     
     try:
@@ -231,6 +233,7 @@ async def prepare_5v5_match(
     except Exception:
         globals.active_matches.pop(match_id, None)
         _clear_waiting_lobby_ids(match_id)
+        save_match_state()
         raise
     
     return match_record
@@ -274,6 +277,7 @@ async def handle_lobby_id_submission(update: Update, context: ContextTypes.DEFAU
 
     lobby_ids = match.setdefault("lobby_ids", {})
     lobby_ids[side] = text
+    save_match_state()
     lobby_ids.setdefault("shared", text)
     globals.waiting_lobby_id.pop(user_id, None)
 
@@ -373,6 +377,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
                 globals.queue_1v1[:] = [
                     p for p in queue if p["user_id"] not in [p1_id, p2_id]
                 ]
+                save_match_state()
 
                 for pid in [p1_id, p2_id]:
                     job = globals.search_jobs.pop(pid, None)
@@ -400,6 +405,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
 
                 except TelegramError:
                     globals.active_matches.pop(match_id, None)
+                    save_match_state()
                     for player in (p1, p2):
                         restored = dict(player)
                         restored["elo"] = get_rating(restored["user_id"])
@@ -469,6 +475,7 @@ async def find_match_5v5(context, chat_id=None, user_id=None):
                 globals.queue_5v5[:] = [
                     p for p in queue if p["user_id"] not in player_ids
                 ]
+                save_match_state()
 
                 for pid in player_ids:
                     job = globals.search_jobs.pop(pid, None)
@@ -511,6 +518,7 @@ async def handle_match_actions(update, context):
             return
 
         match['ready'].add(user_id)
+    save_match_state()
         await query.edit_message_text("✅ Вы подтвердили участие!")
 
         if len(match['ready']) == len(match['players']) and not match.get("started", False):
@@ -581,6 +589,7 @@ async def handle_match_actions(update, context):
         if not match or user_id not in match.get("players", []):
             return
         globals.active_matches.pop(match_id, None)
+        save_match_state()
 
         _clear_waiting_lobby_ids(match_id)
         
@@ -671,6 +680,7 @@ async def handle_match_actions(update, context):
             return
 
         globals.waiting_lobby_id[int(user_id)] = (match_id, "blue")
+        save_match_state()
 
         try:
             await context.bot.send_message(
@@ -715,6 +725,7 @@ async def handle_result_confirmation(update, context):
                 "winner_side": winners_side,
                 "loser_side": losers_side,
             }
+            save_match_state()
 
             teams = match.get("teams", {})
 
@@ -787,6 +798,7 @@ async def handle_result_confirmation(update, context):
         match['confirmed'] = {user_id}
         match['disputed'] = False
         globals.pending_results[match_id] = {"winner": winner, "loser": loser}
+        save_match_state()
 
         if is_bot_player(loser):
             match['confirmed'] = set(match['players'])
@@ -820,6 +832,7 @@ async def handle_result_confirmation(update, context):
             return
 
         match.setdefault('confirmed', set()).add(user_id)
+        save_match_state()
         await _finalize_match_result(match_id, context)
 
     elif data.startswith("reject_win_"):
@@ -832,6 +845,7 @@ async def handle_result_confirmation(update, context):
         _clear_waiting_lobby_ids(match_id)
 
         globals.pending_results.pop(match_id, None)
+        save_match_state()
         
         job = globals.match_reminders.pop(match_id, None)
         if job:
@@ -874,6 +888,7 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         return
 
     globals.pending_results.pop(match_id, None)
+    save_match_state()
 
     _clear_waiting_lobby_ids(match_id)
 
