@@ -42,7 +42,7 @@ class MatchNotificationFailureTests(unittest.IsolatedAsyncioTestCase):
         globals.search_jobs = self.old_jobs
 
     async def test_failed_match_notification_restores_full_entries_and_jobs(self):
-        with patch("handlers.matchmaking.get_rating", side_effect=lambda uid: 1000 + int(uid)):
+        with patch("handlers.matchmaking.get_rating", side_effect=lambda uid, mode=None: 1000 + int(uid)):
             await matchmaking.find_match_1v1(self.context)
 
         self.assertEqual(len(globals.queue_1v1), 2)
