@@ -219,7 +219,6 @@ async def prepare_5v5_match(
     }
 
     globals.active_matches[match_id] = match_record
-    save_match_state()
     _set_lobby_leaders_waiting(match_id, roles)
     
     try:
@@ -658,6 +657,7 @@ async def handle_match_actions(update, context):
                 except TelegramError:
                     pass
 
+        save_match_state()
         await query.edit_message_text("❌ Матч отменён.")
         result = await register_infraction(user_id, "afk", context)
         if result == "warn":
