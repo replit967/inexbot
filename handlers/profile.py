@@ -39,14 +39,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    profile_data = get_profile(user_id)
+    profile_1v1 = get_profile(user_id, "1v1")
+    profile_5v5 = get_profile(user_id, "5v5")
     username = globals.names.get(user_id, f"ID {user_id}")
     text = (
         f"👤 Профиль игрока:\n"
         f"{username}\n\n"
-        f"🏆 ELO: {profile_data['rating']}\n"
-        f"✅ Побед: {profile_data['wins']}\n"
-        f"❌ Поражений: {profile_data['losses']}"
+        f"⚔️ 1v1 ELO: {profile_1v1['rating']}\n"
+        f"   Побед: {profile_1v1['wins']} | Поражений: {profile_1v1['losses']}\n\n"
+        f"🛡 5v5 ELO: {profile_5v5['rating']}\n"
+        f"   Побед: {profile_5v5['wins']} | Поражений: {profile_5v5['losses']}"
     )
     mlbb = globals.mlbb_profiles.get(user_id)
     if mlbb:
@@ -247,9 +249,12 @@ async def player_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     uid = str(matches[0])
     nickname = globals.names[uid]
-    stats = get_profile(uid)
-    total = stats["wins"] + stats["losses"]
-    win_rate = round(stats["wins"] * 100 / total, 1) if total else 0
+    stats_1v1 = get_profile(uid, "1v1")
+    stats_5v5 = get_profile(uid, "5v5")
+    total_1v1 = stats_1v1["wins"] + stats_1v1["losses"]
+    total_5v5 = stats_5v5["wins"] + stats_5v5["losses"]
+    win_rate_1v1 = round(stats_1v1["wins"] * 100 / total_1v1, 1) if total_1v1 else 0
+    win_rate_5v5 = round(stats_5v5["wins"] * 100 / total_5v5, 1) if total_5v5 else 0
     mlbb = globals.mlbb_profiles.get(uid)
     linked_status = "привязан, не подтверждён" if mlbb else "не привязан"
     trust_data = globals.trust_data.get(uid, {})
@@ -258,10 +263,8 @@ async def player_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
         f"👤 Профиль INEXmode: {html.escape(nickname)}",
         "",
-        f"🏆 ELO: {stats['rating']}",
-        f"✅ Побед: {stats['wins']}",
-        f"❌ Поражений: {stats['losses']}",
-        f"📈 Винрейт: {win_rate}% ({total} матчей)",
+        f"⚔️ 1v1 ELO: {stats_1v1['rating']} | Винрейт: {win_rate_1v1}% ({total_1v1} матчей)",
+        f"🛡 5v5 ELO: {stats_5v5['rating']} | Винрейт: {win_rate_5v5}% ({total_5v5} матчей)",
         f"🎮 MLBB аккаунт: {linked_status}",
     ]
     if trust_score is not None:
