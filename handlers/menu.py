@@ -3,7 +3,9 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from handlers.profile import (
+    start,
     profile,
+    player_lookup,
     top,
     history,
     trust,
@@ -38,6 +40,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await rating_history(update, context)
     elif action == "🔐 Trust Factor":
         await trust(update, context)
+    elif action == "🔎 Найти игрока":
+        context.user_data["awaiting_player_lookup"] = True
+        await message.reply_text("🔎 Введи точный ник игрока, чтобы открыть его публичный профиль.")
+    elif action == "🏠 Главное меню":
+        await start(update, context)
     elif action == "⚙️ Настройки":
         await message.reply_text(
             "⚙️ Настройки профиля\n\n"
@@ -47,5 +54,9 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Для поиска профиля игрока: /player <ник>."
         )
     else:
+        if context.user_data.pop("awaiting_player_lookup", False):
+            context.args = [action]
+            await player_lookup(update, context)
+            return
         # Preserve free-text lobby ID handling for the assigned lobby leader.
         await handle_lobby_id_submission(update, context)
