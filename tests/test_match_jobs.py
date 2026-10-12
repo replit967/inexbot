@@ -12,8 +12,8 @@ class FakeJobQueue:
         self.calls.append(job)
         return job
 
-    def run_once(self, callback, **kwargs):
-        job = {"kind": "once", "callback": callback, **kwargs}
+    def run_once(self, callback, when, **kwargs):
+        job = {"kind": "once", "callback": callback, "when": when, **kwargs}
         self.calls.append(job)
         return job
 
