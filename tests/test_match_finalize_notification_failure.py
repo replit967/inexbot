@@ -71,7 +71,7 @@ class MatchFinalizeNotificationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         await matchmaking._finalize_match_result("m5", self.context)
 
-        self.ratings.assert_called_once_with(blue, red)
+        self.ratings.assert_called_once_with(blue, red, mode="5v5")
         self.history.assert_called_once()
         self.assertEqual(self.history.call_args.args[0], "m5")
         self.assertEqual(self.history.call_args.args[1]["winner"], blue)
