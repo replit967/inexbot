@@ -8,11 +8,35 @@ from handlers.matchmaking import find_match_1v1, find_match_5v5
 
 COOLDOWN_SECONDS = 5
 
+
+def _ban_message(user_id):
+    """Return a user-facing ban message, or None when the user is not banned."""
+    status = is_banned(user_id)
+    if not status:
+        return None
+
+    ban_info = globals.bans.get(str(user_id), {})
+    reason = ban_info.get("reason", "не указана")
+    if status == "permanent":
+        return f"🚫 Вы забанены навсегда.\nПричина: {reason}"
+
+    until = ban_info.get("until")
+    if until:
+        unban_time = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(until))
+        return f"🚫 Вы временно забанены до {unban_time}.\nПричина: {reason}"
+    return f"🚫 Вы временно забанены.\nПричина: {reason}"
+
+
 # Команда /find
 async def find(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    now = time.time()
 
+    ban_message = _ban_message(user_id)
+    if ban_message:
+        await update.message.reply_text(ban_message)
+        return
+
+    now = time.time()
     if user_id in globals.user_cooldowns and now - globals.user_cooldowns[user_id] < COOLDOWN_SECONDS:
         await update.message.reply_text("⏳ Подождите несколько секунд перед повторной попыткой.")
         return
@@ -35,20 +59,10 @@ async def handle_mode_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     mode = query.data
     now = time.time()
 
-    # Проверка бана
-    bans = globals.bans.get(str(user_id))
-    if bans:
-        until = bans.get("until")
-        reason = bans.get("reason", "не указана")
-        if until == -1:
-            await query.edit_message_text(f"🚫 Вы забанены навсегда.\nПричина: {reason}")
-            return
-        elif until and until > now:
-            unban_time = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(until))
-            await query.edit_message_text(f"🚫 Вы временно забанены до {unban_time}.\nПричина: {reason}")
-            return
-        else:
-            del globals.bans[str(user_id)]
+    ban_message = _ban_message(user_id)
+    if ban_message:
+        await query.edit_message_text(ban_message)
+        return
 
     is_1v1 = mode == "mode_1v1"
     queue = globals.queue_1v1 if is_1v1 else globals.queue_5v5
@@ -101,7 +115,6 @@ async def handle_mode_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     globals.search_jobs[user_id] = job
 
-    
     if is_1v1:
         await find_match_1v1(context, query.message.chat_id, user_id)
     else:
@@ -153,4 +166,3 @@ async def handle_leave_queue(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         if "Message is not modified" not in str(e):
             print(f"Ошибка при уведомлении о выходе: {e}")
-
