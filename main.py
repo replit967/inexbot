@@ -21,10 +21,11 @@ from core.infractions import load_infractions, reset_daily_warnings
 from core.rating import load_ratings, load_matches
 from core.match_state import load_match_state
 from core.match_jobs import restore_matchmaking_jobs
+from core.mlbb_profiles import load_mlbb_profiles
 from core.bans import load_bans
 from core.names import load_names, load_nick_timestamps
 
-from handlers.profile import start, profile, top, trust, history, set_name
+from handlers.profile import start, profile, top, trust, history, set_name, set_mlbb_id
 from handlers.report import report_command, load_report_log
 from handlers.queue import find, handle_mode_choice, handle_leave_queue
 from handlers.matchmaking import (
@@ -79,6 +80,7 @@ def load_all_data():
     load_bans()
     load_names()
     load_nick_timestamps()
+    load_mlbb_profiles()
     load_report_log()
     load_match_state()
     logger.info("✅ Все данные успешно загружены")
@@ -133,6 +135,7 @@ def main():
     app.add_handler(CommandHandler("trust", trust, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("history", history, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("setname", set_name, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("setmlbbid", set_mlbb_id, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("report", report_command, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("find", find, filters=filters.ChatType.PRIVATE))
 
