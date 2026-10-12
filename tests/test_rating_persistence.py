@@ -69,6 +69,23 @@ class RatingPersistenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rating.update_ratings([1], [2], mode="ranked")
 
+    def test_rating_history_is_separate_bounded_and_persistent(self):
+        for _ in range(55):
+            rating.update_ratings([707], [808], mode="1v1")
+        rating.update_ratings([707], [808], mode="5v5")
+
+        history_1v1 = rating.get_rating_history(707, "1v1", limit=100)
+        history_5v5 = rating.get_rating_history(707, "5v5", limit=100)
+        self.assertEqual(len(history_1v1), 55)
+        self.assertEqual(len(history_5v5), 1)
+        self.assertEqual(history_1v1[-1]["rating"], 2375)
+        self.assertIn("timestamp", history_1v1[-1])
+
+        globals.ratings = {}
+        rating.load_ratings()
+        self.assertEqual(len(rating.get_rating_history(707, "1v1", limit=100)), 55)
+        self.assertEqual(len(rating.get_rating_history(707, "5v5", limit=100)), 1)
+
     def test_match_history_survives_reload(self):
         record = {"players": [101, 202], "winner": 101, "mode": "1v1"}
         rating.add_match_history("match-1", record)
