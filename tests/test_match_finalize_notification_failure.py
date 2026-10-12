@@ -20,7 +20,7 @@ class MatchFinalizeNotificationFailureTests(unittest.IsolatedAsyncioTestCase):
         globals.BOT_PLAYER_IDS = set()
         self.context = type("Context", (), {})()
         self.context.bot = type("Bot", (), {"send_message": AsyncMock(side_effect=TelegramError("simulated send failure"))})()
-        self.ratings_patch = patch("handlers.matchmaking.update_ratings", side_effect=lambda winners, losers: {int(uid): (25 if int(uid) in winners else -25) for uid in list(winners) + list(losers)})
+        self.ratings_patch = patch("handlers.matchmaking.update_ratings", side_effect=lambda winners, losers, mode=None: {int(uid): (25 if int(uid) in winners else -25) for uid in list(winners) + list(losers)})
         self.history_patch = patch("handlers.matchmaking.add_match_history")
         self.ratings = self.ratings_patch.start()
         self.history = self.history_patch.start()
