@@ -14,6 +14,7 @@ from core.names import load_names, save_names, load_nick_timestamps, save_nick_t
 from core.names import cache_username
 from core.names import get_display_name, cache_username
 from core.names import get_display_name_with_link
+from core.mlbb_profiles import link_mlbb_profile
 
 
 
@@ -38,16 +39,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    profile = get_profile(user_id)
+    profile_data = get_profile(user_id)
     username = globals.names.get(user_id, f"ID {user_id}")
     text = (
         f"👤 Профиль игрока:\n"
         f"{username}\n\n"
-        f"🏆 ELO: {profile['rating']}\n"
-        f"✅ Побед: {profile['wins']}\n"
-        f"❌ Поражений: {profile['losses']}"
+        f"🏆 ELO: {profile_data['rating']}\n"
+        f"✅ Побед: {profile_data['wins']}\n"
+        f"❌ Поражений: {profile_data['losses']}"
     )
+    mlbb = globals.mlbb_profiles.get(user_id)
+    if mlbb:
+        text += f"\n\n🎮 MLBB ID: {mlbb['game_id']} ({mlbb['zone_id']})\n⚠️ Аккаунт пока не подтверждён."
+    else:
+        text += "\n\n🎮 MLBB ID: не привязан\nИспользуйте /setmlbbid <game_id> <zone_id>"
     await update.message.reply_text(text)
+
+
+async def set_mlbb_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Link a player's MLBB ID without claiming ownership verification."""
+    if len(context.args) != 2:
+        await update.message.reply_text(
+            "Использование: /setmlbbid <game_id> <zone_id>\n"
+            "Пример: /setmlbbid 123456789 1234"
+        )
+        return
+
+    success, reason = link_mlbb_profile(
+        update.effective_user.id, context.args[0], context.args[1]
+    )
+    messages = {
+        "game_id": "Game ID должен содержать от 5 до 15 цифр.",
+        "zone_id": "Zone ID должен содержать от 3 до 6 цифр.",
+        "already_linked": "Этот MLBB аккаунт уже привязан к другому профилю INEXmode.",
+        "save_failed": "Не удалось сохранить профиль. Попробуйте позже.",
+    }
+    if not success:
+        await update.message.reply_text(messages.get(reason, "Не удалось привязать аккаунт."))
+        return
+
+    await update.message.reply_text(
+        "✅ MLBB ID сохранён в профиле INEXmode.\n"
+        "⚠️ Владение аккаунтом пока не подтверждено, статистика автоматически не загружается."
+    )
 
 
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
