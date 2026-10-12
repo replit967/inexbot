@@ -50,8 +50,8 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
     elif action == "🚩 Пожаловаться":
         await message.reply_text(
-            "🚩 Чтобы отправить жалобу, используй формат:\\n"
-            '/report "ник или Telegram ID" причина\\n\\n'
+            "🚩 Чтобы отправить жалобу, используй формат:\n"
+            '/report "ник или Telegram ID" причина\n\n'
             'Пример: /report "Player One" оскорбления'
         )
     elif action == "⚙️ Настройки":
@@ -93,4 +93,4 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     for entry in reversed(entries):
         timestamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry["timestamp"]))
         lines.append(f"• {timestamp} · {entry['rating']} ELO")
-    await query.edit_message_text("\\n".join(lines))
+    await query.edit_message_text("\n".join(lines))
