@@ -5,7 +5,7 @@ from core.bans import ban_user, unban_user
 from core import globals
 from core.trust import save_trust, recalculate_trust_score
 from handlers.report import save_report_log
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 
@@ -128,6 +128,41 @@ async def clear_reports_command(update: Update, context: ContextTypes.DEFAULT_TY
     await update.effective_message.reply_text(
         f"✅ Жалобы на пользователя {user_id} очищены. Удалено записей: {len(keys_to_remove)}."
     )
+
+
+# ----- УПРАВЛЕНИЕ БОТОМ -----
+async def shutdown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask an administrator to confirm a graceful bot shutdown."""
+    if not await _require_admin(update):
+        return
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🛑 Да, выключить", callback_data="shutdown_confirm"),
+            InlineKeyboardButton("Отмена", callback_data="shutdown_cancel"),
+        ]
+    ])
+    await update.effective_message.reply_text(
+        "⚠️ Выключить бота? Он перестанет отвечать, пока процесс не будет запущен снова.",
+        reply_markup=keyboard,
+    )
+
+
+async def handle_shutdown_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Only an administrator may confirm shutdown; stop the PTB run_polling loop."""
+    query = update.callback_query
+    await query.answer()
+
+    if not _is_admin(update):
+        await query.edit_message_text("⛔ Только для админов.")
+        return
+
+    if query.data == "shutdown_cancel":
+        await query.edit_message_text("✅ Выключение отменено.")
+        return
+
+    await query.edit_message_text("🛑 Бот выключается по команде администратора.")
+    context.application.stop_running()
 
 
 # ----- DEBUG/ТЕСТ КОМАНДЫ -----
