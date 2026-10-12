@@ -933,7 +933,7 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     def _format_rating_change(pid: int) -> str:
         delta = rating_changes.get(int(pid), 0)
         sign = "+" if delta > 0 else ""
-        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid, match.get("mode", "1v1"))})"
+        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid, match.get('mode', '1v1'))})"
         
     if reason == "timeout":
         for uid in human_winners:
