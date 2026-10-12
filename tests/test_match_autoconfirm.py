@@ -19,15 +19,11 @@ class MatchAutoconfirmTests(unittest.IsolatedAsyncioTestCase):
         globals.BOT_PLAYER_IDS = set()
         self.context = type("Context", (), {})()
         self.context.bot = type("Bot", (), {"send_message": AsyncMock()})()
-        self.patches = [
-            patch("handlers.matchmaking._finalize_match_result", new_callable=AsyncMock) as self.finalize,
-        ]
-        for item in self.patches:
-            item.start()
+        self.finalize_patch = patch("handlers.matchmaking._finalize_match_result", new_callable=AsyncMock)
+        self.finalize = self.finalize_patch.start()
 
     def tearDown(self):
-        for item in reversed(self.patches):
-            item.stop()
+        self.finalize_patch.stop()
         globals.active_matches = self.old_matches
         globals.pending_results = self.old_pending
         globals.waiting_lobby_id = self.old_waiting
