@@ -517,7 +517,7 @@ async def handle_match_actions(update, context):
             return
 
         match['ready'].add(user_id)
-    save_match_state()
+        save_match_state()
         await query.edit_message_text("✅ Вы подтвердили участие!")
 
         if len(match['ready']) == len(match['players']) and not match.get("started", False):
