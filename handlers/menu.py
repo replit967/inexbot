@@ -1,5 +1,5 @@
 """Routing for the persistent INEXmode reply keyboard."""
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 from handlers.profile import (
@@ -36,8 +36,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == "📜 История матчей":
         await history(update, context)
     elif action == "📈 История ELO":
-        context.args = ["1v1"]
-        await rating_history(update, context)
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⚔️ История 1v1", callback_data="menu_history_1v1"),
+            InlineKeyboardButton("🛡 История 5v5", callback_data="menu_history_5v5"),
+        ]])
+        await message.reply_text("Выбери режим для истории ELO:", reply_markup=keyboard)
     elif action == "🔐 Trust Factor":
         await trust(update, context)
     elif action == "🔎 Найти игрока":
@@ -60,3 +63,28 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         # Preserve free-text lobby ID handling for the assigned lobby leader.
         await handle_lobby_id_submission(update, context)
+
+
+
+async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    mode = query.data.rsplit("_", 1)[-1]
+    if mode not in ("1v1", "5v5"):
+        return
+
+    from core.rating import get_rating_history
+    import time
+
+    entries = get_rating_history(query.from_user.id, mode, limit=10)
+    if not entries:
+        await query.edit_message_text(
+            f"📉 История рейтинга {mode} пока пуста. Она начнёт собираться после следующих матчей."
+        )
+        return
+
+    lines = [f"📈 История рейтинга {mode} (последние {len(entries)} изменений):", ""]
+    for entry in reversed(entries):
+        timestamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry["timestamp"]))
+        lines.append(f"• {timestamp} · {entry['rating']} ELO")
+    await query.edit_message_text("\\n".join(lines))
