@@ -25,7 +25,7 @@ from core.mlbb_profiles import load_mlbb_profiles
 from core.bans import load_bans
 from core.names import load_names, load_nick_timestamps
 
-from handlers.profile import start, profile, top, trust, history, set_name, set_mlbb_id
+from handlers.profile import start, profile, top, trust, history, set_name, set_mlbb_id, player_lookup
 from handlers.report import report_command, load_report_log
 from handlers.queue import find, handle_mode_choice, handle_leave_queue
 from handlers.matchmaking import (
@@ -136,6 +136,7 @@ def main():
     app.add_handler(CommandHandler("history", history, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("setname", set_name, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("setmlbbid", set_mlbb_id, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("player", player_lookup, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("report", report_command, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("find", find, filters=filters.ChatType.PRIVATE))
 
