@@ -1,0 +1,44 @@
+name: Python tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests, syntax, and imports
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "python-telegram-bot[job-queue]==20.4" "python-dotenv>=1.1,<2" "Pillow>=10,<11" "fastapi>=0.119,<1" "uvicorn>=0.38,<1"
+
+      - name: Compile Python files
+        run: python -m compileall -q .
+
+      - name: Import application modules
+        run: |
+          python -c "import core.globals, core.trust, core.infractions, core.rating, core.bans, core.names"
+          python -c "import handlers.profile, handlers.report, handlers.queue, handlers.matchmaking, handlers.admin"
+
+      - name: Import main application without starting polling
+        run: BOT_TOKEN=ci-dummy-token python -c "import main; print('Main application import OK; polling was not started.')"
+
+      - name: Run authorization tests
+        run: python -m unittest discover -s tests -v

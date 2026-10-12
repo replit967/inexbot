@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 from core import globals
 from core.rating import update_ratings, get_rating, add_match_history
+from core.match_state import save_match_state
 from core.infractions import register_clean_game, register_infraction
 from telegram.ext import ContextTypes
 
@@ -205,6 +206,7 @@ async def prepare_5v5_match(
 
     match_record = {
         "players": player_ids,
+        "queue_entries": [dict(p) for p in blue_players + red_players],
         "ready": set(),
         "mode": "5v5",
         "winner": None,
@@ -230,6 +232,7 @@ async def prepare_5v5_match(
     except Exception:
         globals.active_matches.pop(match_id, None)
         _clear_waiting_lobby_ids(match_id)
+        save_match_state()
         raise
     
     return match_record
@@ -273,6 +276,7 @@ async def handle_lobby_id_submission(update: Update, context: ContextTypes.DEFAU
 
     lobby_ids = match.setdefault("lobby_ids", {})
     lobby_ids[side] = text
+    save_match_state()
     lobby_ids.setdefault("shared", text)
     globals.waiting_lobby_id.pop(user_id, None)
 
@@ -361,6 +365,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
 
                 globals.active_matches[match_id] = {
                     'players': [p1_id, p2_id],
+                    'queue_entries': [dict(p1), dict(p2)],
                     'ready': set(),
                     'mode': '1v1',
                     'winner': None,
@@ -371,6 +376,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
                 globals.queue_1v1[:] = [
                     p for p in queue if p["user_id"] not in [p1_id, p2_id]
                 ]
+                save_match_state()
 
                 for pid in [p1_id, p2_id]:
                     job = globals.search_jobs.pop(pid, None)
@@ -398,10 +404,30 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
 
                 except TelegramError:
                     globals.active_matches.pop(match_id, None)
-                    globals.queue_1v1.extend([
-                        {"user_id": p1_id, "elo": elo1, "joined_at": p1['joined_at']},
-                        {"user_id": p2_id, "elo": elo2, "joined_at": p2['joined_at']}
-                    ])
+                    save_match_state()
+                    for player in (p1, p2):
+                        restored = dict(player)
+                        restored["elo"] = get_rating(restored["user_id"], "1v1")
+                        restored["reminder_message_id"] = None
+                        if not any(
+                            int(item.get("user_id", -1)) == int(restored["user_id"])
+                            for item in globals.queue_1v1
+                        ):
+                            globals.queue_1v1.append(restored)
+
+                        pid = int(restored["user_id"])
+                        old_job = globals.search_jobs.pop(pid, None)
+                        if old_job:
+                            old_job.schedule_removal()
+                        chat_id_for_job = restored.get("chat_id", pid)
+                        new_job = context.job_queue.run_repeating(
+                            globals.send_search_reminder,
+                            interval=60,
+                            first=60,
+                            data={"user_id": pid, "chat_id": chat_id_for_job},
+                        )
+                        globals.search_jobs[pid] = new_job
+                    save_match_state()
                 return
 
     for player in globals.queue_1v1:
@@ -449,6 +475,7 @@ async def find_match_5v5(context, chat_id=None, user_id=None):
                 globals.queue_5v5[:] = [
                     p for p in queue if p["user_id"] not in player_ids
                 ]
+                save_match_state()
 
                 for pid in player_ids:
                     job = globals.search_jobs.pop(pid, None)
@@ -487,11 +514,16 @@ async def handle_match_actions(update, context):
         match = globals.active_matches.get(match_id)
         if not match:
             return
+        if user_id not in match.get("players", []):
+            return
 
         match['ready'].add(user_id)
+        save_match_state()
         await query.edit_message_text("✅ Вы подтвердили участие!")
 
-        if len(match['ready']) == len(match['players']):
+        if len(match['ready']) == len(match['players']) and not match.get("started", False):
+            # Set this before the next await so concurrent callbacks cannot start the match twice.
+            match["started"] = True
             job = globals.match_reminders.pop(match_id, None)
             if job:
                 job.schedule_removal()
@@ -553,9 +585,11 @@ async def handle_match_actions(update, context):
     
     elif data.startswith("cancel_"):
         match_id = data.split("_", 1)[1]
-        match = globals.active_matches.pop(match_id, None)
-        if not match:
+        match = globals.active_matches.get(match_id)
+        if not match or user_id not in match.get("players", []):
             return
+        globals.active_matches.pop(match_id, None)
+        save_match_state()
 
         _clear_waiting_lobby_ids(match_id)
         
@@ -563,23 +597,68 @@ async def handle_match_actions(update, context):
         if job:
             job.schedule_removal()
 
-        for pid in match['players']:
-            if pid != user_id:
+        queue = globals.queue_1v1 if match.get("mode") == "1v1" else globals.queue_5v5
+        entries_by_id = {
+            int(entry["user_id"]): dict(entry)
+            for entry in match.get("queue_entries", [])
+            if isinstance(entry, dict) and entry.get("user_id") is not None
+        }
+
+        for pid in match.get("players", []):
+            pid = int(pid)
+            if pid == int(user_id):
+                continue
+
+            try:
+                await context.bot.send_message(
+                    pid,
+                    "⚠️ Матч отменён другим игроком. Возврат в очередь.")
+            except TelegramError:
+                pass
+
+            entry = entries_by_id.get(pid, {
+                "user_id": pid,
+                "elo": get_rating(pid, match.get("mode", "1v1")),
+                "joined_at": time.time(),
+                "chat_id": pid,
+                "notify_message_id": None,
+            })
+            entry["user_id"] = pid
+            entry["elo"] = get_rating(pid, match.get("mode", "1v1"))
+            entry.setdefault("joined_at", time.time())
+            entry.setdefault("chat_id", pid)
+            entry.setdefault("notify_message_id", None)
+            entry["reminder_message_id"] = None
+
+            if not any(int(p.get("user_id", -1)) == pid for p in queue):
+                queue.append(entry)
+
+            old_job = globals.search_jobs.pop(pid, None)
+            if old_job:
+                old_job.schedule_removal()
+
+            job = context.job_queue.run_repeating(
+                globals.send_search_reminder,
+                interval=60,
+                first=60,
+                data={"user_id": pid, "chat_id": entry["chat_id"]},
+            )
+            globals.search_jobs[pid] = job
+
+            if entry.get("notify_message_id"):
                 try:
-                    await context.bot.send_message(
-                        pid,
-                        "⚠️ Матч отменён другим игроком. Возврат в очередь.")
+                    await context.bot.edit_message_text(
+                        chat_id=entry["chat_id"],
+                        message_id=entry["notify_message_id"],
+                        text="🛡 Ожидание команды..." if match.get("mode") == "5v5" else "🔍 Поиск соперника...",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("🚪 Выйти из очереди 🚪", callback_data="leave_queue")
+                        ]]),
+                    )
                 except TelegramError:
                     pass
 
-                queue = globals.queue_1v1 if match[
-                    "mode"] == "1v1" else globals.queue_5v5
-                queue.append({
-                    "user_id": pid,
-                    "elo": get_rating(pid),
-                    "joined_at": time.time()
-                })
-
+        save_match_state()
         await query.edit_message_text("❌ Матч отменён.")
         result = await register_infraction(user_id, "afk", context)
         if result == "warn":
@@ -602,6 +681,7 @@ async def handle_match_actions(update, context):
             return
 
         globals.waiting_lobby_id[int(user_id)] = (match_id, "blue")
+        save_match_state()
 
         try:
             await context.bot.send_message(
@@ -629,7 +709,14 @@ async def handle_result_confirmation(update, context):
         if not match:
             return
 
-        if match.get('mode') == '5v5' and role in {"blue", "red"}:
+        if match.get('mode') == '5v5':
+            if role not in {"blue", "red"}:
+                return
+            roles = match.get("team_roles", {})
+            leader_id = roles.get("lobby_leader") or (roles.get("blue") or {}).get("leader")
+            if not leader_id or int(user_id) != int(leader_id):
+                return
+
             winners_side = role
             losers_side = "red" if winners_side == "blue" else "blue"
             match['winner'] = {"side": winners_side, "reporter": user_id}
@@ -639,8 +726,8 @@ async def handle_result_confirmation(update, context):
                 "winner_side": winners_side,
                 "loser_side": losers_side,
             }
+            save_match_state()
 
-            roles = match.get("team_roles", {})
             teams = match.get("teams", {})
 
             confirm_candidates = []
@@ -672,6 +759,7 @@ async def handle_result_confirmation(update, context):
                 job.schedule_removal()
 
             if confirm_target and not is_bot_player(confirm_target):
+                match["result_confirmation_user_id"] = int(confirm_target)
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("Подтвердить", callback_data=f"confirm_win_{match_id}")],
                     [InlineKeyboardButton("Оспорить", callback_data=f"reject_win_{match_id}")],
@@ -697,7 +785,13 @@ async def handle_result_confirmation(update, context):
 
             return
         
-        players = match['players']
+        if match.get("mode") != "1v1":
+            return
+        players = match.get("players", [])
+        if len(players) != 2 or role not in {"leader", "opponent"}:
+            return
+        if int(user_id) != int(players[0]):
+            return
         winner = players[0] if role == "leader" else players[1]
         loser = players[1] if role == "leader" else players[0]
 
@@ -705,12 +799,14 @@ async def handle_result_confirmation(update, context):
         match['confirmed'] = {user_id}
         match['disputed'] = False
         globals.pending_results[match_id] = {"winner": winner, "loser": loser}
+        save_match_state()
 
         if is_bot_player(loser):
             match['confirmed'] = set(match['players'])
             await _finalize_match_result(match_id, context, reason="bot_auto")
             return
             
+        match["result_confirmation_user_id"] = int(loser)
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("Подтвердить", callback_data=f"confirm_win_{match_id}")],
             [InlineKeyboardButton("Оспорить", callback_data=f"reject_win_{match_id}")]
@@ -733,19 +829,24 @@ async def handle_result_confirmation(update, context):
         match = globals.active_matches.get(match_id)
         if not match or not match.get("winner"):
             return
+        if int(match.get("result_confirmation_user_id", -1)) != int(user_id):
+            return
 
         match.setdefault('confirmed', set()).add(user_id)
+        save_match_state()
         await _finalize_match_result(match_id, context)
 
     elif data.startswith("reject_win_"):
         match_id = data.split("_", 2)[2]
-        match = globals.active_matches.pop(match_id, None)
-        if not match:
+        match = globals.active_matches.get(match_id)
+        if not match or int(match.get("result_confirmation_user_id", -1)) != int(user_id):
             return
+        globals.active_matches.pop(match_id, None)
 
         _clear_waiting_lobby_ids(match_id)
 
         globals.pending_results.pop(match_id, None)
+        save_match_state()
         
         job = globals.match_reminders.pop(match_id, None)
         if job:
@@ -773,12 +874,22 @@ async def autoconfirm_winner_later(context):
     await _finalize_match_result(match_id, context, reason="timeout")
 
 
+async def _send_match_result_message(context, user_id: int, text: str) -> bool:
+    """Send a post-result notification without undoing an already finalized match."""
+    try:
+        await context.bot.send_message(user_id, text)
+        return True
+    except TelegramError:
+        return False
+
+
 async def _finalize_match_result(match_id: str, context, *, reason: str | None = None):
     match = globals.active_matches.pop(match_id, None)
     if not match or not match.get("winner"):
         return
 
     globals.pending_results.pop(match_id, None)
+    save_match_state()
 
     _clear_waiting_lobby_ids(match_id)
 
@@ -805,7 +916,7 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     if not winners or not losers:
         return
 
-    rating_changes = update_ratings(winners, losers)
+    rating_changes = update_ratings(winners, losers, mode=match.get("mode", "1v1"))
     match_data = {
         "players": match['players'],
         "winner": winners if match.get("mode") == "5v5" else winners[0],
@@ -822,20 +933,20 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     def _format_rating_change(pid: int) -> str:
         delta = rating_changes.get(int(pid), 0)
         sign = "+" if delta > 0 else ""
-        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid)})"
+        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid, match.get('mode', '1v1'))})"
         
     if reason == "timeout":
         for uid in human_winners:
             await _register_clean_if_human(uid, context)
-            await context.bot.send_message(
-                uid,
+            await _send_match_result_message(
+                context, uid,
                 "⏱ Победа засчитана автоматически.\n"
                 f"Изменение рейтинга: {_format_rating_change(uid)}",
             )
         for uid in human_losers:
             await _register_infraction_if_human(uid, "afk", context)
-            await context.bot.send_message(
-                uid,
+            await _send_match_result_message(
+                context, uid,
                 "⚠️ Вы не подтвердили матч — засчитано поражение.\n"
                 f"Изменение рейтинга: {_format_rating_change(uid)}",
             )
@@ -848,8 +959,8 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         for uid in human_losers:
             await _register_clean_if_human(uid, context)
         for uid in human_winners:
-            await context.bot.send_message(
-                uid,
+            await _send_match_result_message(
+                context, uid,
                 "🤖 Победа подтверждена автоматически — соперник был ботом.\n"
                 f"Изменение рейтинга: {_format_rating_change(uid)}",
             )
@@ -867,13 +978,13 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
         lose_message = "👍 Вы подтвердили поражение."
 
     for uid in human_winners:
-        await context.bot.send_message(
-            uid,
+        await _send_match_result_message(
+            context, uid,
             f"{win_message}\nИзменение рейтинга: {_format_rating_change(uid)}",
         )
     for uid in human_losers:
-        await context.bot.send_message(
-            uid,
+        await _send_match_result_message(
+            context, uid,
             f"{lose_message}\nИзменение рейтинга: {_format_rating_change(uid)}",
         )
 

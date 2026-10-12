@@ -71,3 +71,6 @@ DEBUG_MODE = True
 
 # 🆔 Лидеры, от которых ждём ID лобби (user_id: (match_id, side))
 waiting_lobby_id = {}
+
+# Manually linked Mobile Legends IDs (Telegram user_id: profile dict)
+mlbb_profiles = {}
