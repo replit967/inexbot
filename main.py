@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from core import globals
 from core.trust import load_trust
-from core.infractions import load_infractions, save_infractions
+from core.infractions import load_infractions, reset_daily_warnings
 from core.rating import load_ratings, load_matches
 from core.bans import load_bans
 from core.names import load_names, load_nick_timestamps
@@ -60,7 +60,6 @@ if not my_bot_token:
     logger.critical("❌ Переменная BOT_TOKEN не найдена в .env")
     sys.exit(1)
 
-last_reset = 0  # Сброс варнов
 
 
 async def debug_mention(update, context):
@@ -83,20 +82,12 @@ def load_all_data():
 
 
 async def matchmaking_job(context: ContextTypes.DEFAULT_TYPE):
-    global last_reset
-    now = int(time.time())
-
     try:
         await find_match_1v1(context)
         await find_match_5v5(context)
 
-        if now - last_reset >= 86400:
-            for uid in globals.infractions:
-                globals.infractions[uid]["warnings"] = 0
-                globals.infractions[uid]["last_reset"] = now
-            save_infractions()
-            last_reset = now
-            logger.info("🔁 Предупреждения обнулены")
+        if reset_daily_warnings():
+            logger.info("🔁 Предупреждения обнулены по индивидуальному таймеру")
     except Exception:
         logger.exception("❌ Ошибка в matchmaking_job")
 
