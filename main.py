@@ -28,6 +28,7 @@ from core.names import load_names, load_nick_timestamps
 from handlers.profile import start, profile, top, trust, history, set_name, set_mlbb_id, player_lookup, rating_history
 from handlers.report import report_command, load_report_log
 from handlers.queue import find, handle_mode_choice, handle_leave_queue
+from handlers.menu import handle_menu
 from handlers.matchmaking import (
     handle_match_actions,
     handle_result_confirmation,
@@ -152,6 +153,14 @@ def main():
     ]
     for cmd, handler in ADMIN_COMMANDS:
         app.add_handler(CommandHandler(cmd, handler, filters=filters.ChatType.PRIVATE))
+
+    # Menu buttons must be handled before free-text lobby ID submissions.
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND,
+            handle_menu,
+        )
+    )
 
     app.add_handler(
         MessageHandler(
