@@ -252,7 +252,7 @@ async def rating_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for entry in reversed(entries):
         timestamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry["timestamp"]))
         lines.append(f"• {timestamp} · {entry['rating']} ELO")
-    await update.message.reply_text("\\n".join(lines))
+    await update.message.reply_text("\n".join(lines))
 
 
 async def player_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
