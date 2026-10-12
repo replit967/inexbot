@@ -42,6 +42,22 @@ def get_profile(user_id, mode=None):
     return {"rating": stats.get("rating", 1000), "wins": stats.get("wins", 0), "losses": stats.get("losses", 0)}
 
 
+def _record_rating_history(user_id, mode, rating):
+    import time
+    history = globals.ratings[str(user_id)].setdefault("rating_history", {})
+    entries = history.setdefault(mode, [])
+    entries.append({"rating": rating, "timestamp": time.time()})
+    del entries[:-100]
+
+
+def get_rating_history(user_id, mode, limit=10):
+    if mode not in ("1v1", "5v5"):
+        raise ValueError("mode must be '1v1' or '5v5'")
+    data = globals.ratings.get(str(user_id), {})
+    history = data.get("rating_history", {}).get(mode, [])
+    count = max(1, min(int(limit), 100))
+    return list(history[-count:])
+
 def update_ratings(winners, losers, mode=None):
     deltas = {}
     if mode is not None and mode not in ("1v1", "5v5"):
@@ -55,6 +71,8 @@ def update_ratings(winners, losers, mode=None):
         before = stats.get("rating", 1000)
         stats["rating"] = before + 25
         stats["wins"] = stats.get("wins", 0) + 1
+        if mode is not None:
+            _record_rating_history(uid, mode, stats["rating"])
         deltas[int(uid)] = stats["rating"] - before
     for uid in losers:
         uid_str = str(uid)
@@ -65,6 +83,8 @@ def update_ratings(winners, losers, mode=None):
         before = stats.get("rating", 1000)
         stats["rating"] = max(0, before - 25)
         stats["losses"] = stats.get("losses", 0) + 1
+        if mode is not None:
+            _record_rating_history(uid, mode, stats["rating"])
         deltas[int(uid)] = stats["rating"] - before
     save_ratings()
     return deltas
