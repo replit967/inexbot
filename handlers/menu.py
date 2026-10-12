@@ -12,6 +12,7 @@ from handlers.profile import (
     set_mlbb_id,
 )
 from handlers.queue import find
+from handlers.matchmaking import handle_lobby_id_submission
 
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -45,3 +46,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• /setmlbbid <game_id> <zone_id> — привязать MLBB ID\n\n"
             "Для поиска профиля игрока: /player <ник>."
         )
+    else:
+        # Preserve free-text lobby ID handling for the assigned lobby leader.
+        await handle_lobby_id_submission(update, context)
