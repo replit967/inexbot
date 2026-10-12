@@ -5,6 +5,7 @@ from core import globals
 from core.bans import is_banned
 from core.rating import get_rating
 from handlers.matchmaking import find_match_1v1, find_match_5v5
+from core.match_state import save_match_state
 
 COOLDOWN_SECONDS = 5
 
@@ -102,6 +103,7 @@ async def handle_mode_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
         })
 
     queue.append(entry)
+    save_match_state()
 
     # Запуск периодических напоминаний (каждые 60 сек)
     job = context.job_queue.run_repeating(
@@ -131,6 +133,7 @@ async def handle_leave_queue(update: Update, context: ContextTypes.DEFAULT_TYPE)
         for player in queue:
             if player["user_id"] == user_id:
                 queue.remove(player)
+                save_match_state()
 
                 # 🧹 Удаляем напоминание (если было)
                 reminder_msg_id = player.get("reminder_message_id")
@@ -159,6 +162,8 @@ async def handle_leave_queue(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     if "Message is not modified" not in str(e):
                         print(f"Ошибка при редактировании сообщения выхода: {e}")
                 return
+
+    save_match_state()
 
     # ⚠️ Если игрок не найден в очереди
     try:
