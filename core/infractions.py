@@ -109,3 +109,18 @@ async def register_clean_game(user_id, context=None):
     from core.trust import save_trust
     save_trust()
     await recalculate_trust_score(user_id, context, reason="честное участие в матчах")
+
+def reset_daily_warnings(now=None):
+    """Reset warning counts only when each user's persisted reset window elapsed."""
+    now = int(time.time()) if now is None else int(now)
+    changed = False
+    for user_data in globals.infractions.values():
+        last_reset = int(user_data.get("last_reset", now))
+        if now - last_reset >= 86400:
+            user_data["warnings"] = 0
+            user_data["strikes"] = 0
+            user_data["last_reset"] = now
+            changed = True
+    if changed:
+        save_infractions()
+    return changed
