@@ -51,7 +51,7 @@ class MatchFinalizeNotificationFailureTests(unittest.IsolatedAsyncioTestCase):
         }
         globals.pending_results["m1"] = {"winner": 101, "loser": 202}
         await matchmaking._finalize_match_result("m1", self.context)
-        self.ratings.assert_called_once_with([101], [202])
+        self.ratings.assert_called_once_with([101], [202], mode="1v1")
         self.history.assert_called_once()
         self.assertNotIn("m1", globals.active_matches)
         self.assertNotIn("m1", globals.pending_results)
