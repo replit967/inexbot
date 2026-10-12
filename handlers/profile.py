@@ -1,7 +1,7 @@
 # handlers/profile.py
 
 import time
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from core.rating import get_profile
@@ -33,8 +33,21 @@ WELCOME_MESSAGE = (
 )
 
 
+MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["🎮 Найти матч", "👤 Мой профиль"],
+        ["🏆 Топ 1v1", "🛡 Топ 5v5"],
+        ["📜 История матчей", "📈 История ELO"],
+        ["🔐 Trust Factor", "⚙️ Настройки"],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+    input_field_placeholder="Выбери раздел INEXmode",
+)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(WELCOME_MESSAGE)
+    await update.message.reply_text(WELCOME_MESSAGE, reply_markup=MAIN_MENU_KEYBOARD)
 
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
