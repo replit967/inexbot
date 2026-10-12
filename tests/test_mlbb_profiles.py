@@ -11,10 +11,8 @@ from core.mlbb_profiles import link_mlbb_profile, load_mlbb_profiles
 class MLBBProfileTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.path_patch = patch(
-            "core.mlbb_profiles.MLBB_PROFILES_FILE",
-            os.path.join(self.temp_dir.name, "mlbb_profiles.json"),
-        )
+        self.path = os.path.join(self.temp_dir.name, "mlbb_profiles.json")
+        self.path_patch = patch("core.mlbb_profiles.MLBB_PROFILES_FILE", self.path)
         self.path_patch.start()
         self.old = globals.mlbb_profiles
         globals.mlbb_profiles = {}
@@ -49,7 +47,7 @@ class MLBBProfileTests(unittest.TestCase):
         )
 
     def test_corrupt_file_does_not_replace_current_profiles(self):
-        with open(os.environ.get("MLBB_PROFILES_FILE", self.path_patch.target), "w", encoding="utf-8") as handle:
+        with open(self.path, "w", encoding="utf-8") as handle:
             json.dump(["invalid"], handle)
         globals.mlbb_profiles = {"existing": {"game_id": "123456", "zone_id": "1234", "verified": False}}
         self.assertFalse(load_mlbb_profiles())
