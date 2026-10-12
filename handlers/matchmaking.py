@@ -407,7 +407,7 @@ async def find_match_1v1(context, chat_id=None, user_id=None):
                     save_match_state()
                     for player in (p1, p2):
                         restored = dict(player)
-                        restored["elo"] = get_rating(restored["user_id"])
+                        restored["elo"] = get_rating(restored["user_id"], "1v1")
                         restored["reminder_message_id"] = None
                         if not any(
                             int(item.get("user_id", -1)) == int(restored["user_id"])
@@ -618,13 +618,13 @@ async def handle_match_actions(update, context):
 
             entry = entries_by_id.get(pid, {
                 "user_id": pid,
-                "elo": get_rating(pid),
+                "elo": get_rating(pid, "1v1"),
                 "joined_at": time.time(),
                 "chat_id": pid,
                 "notify_message_id": None,
             })
             entry["user_id"] = pid
-            entry["elo"] = get_rating(pid)
+            entry["elo"] = get_rating(pid, match.get("mode", "1v1"))
             entry.setdefault("joined_at", time.time())
             entry.setdefault("chat_id", pid)
             entry.setdefault("notify_message_id", None)
@@ -916,7 +916,7 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     if not winners or not losers:
         return
 
-    rating_changes = update_ratings(winners, losers)
+    rating_changes = update_ratings(winners, losers, mode=match.get("mode", "1v1"))
     match_data = {
         "players": match['players'],
         "winner": winners if match.get("mode") == "5v5" else winners[0],
@@ -933,7 +933,7 @@ async def _finalize_match_result(match_id: str, context, *, reason: str | None =
     def _format_rating_change(pid: int) -> str:
         delta = rating_changes.get(int(pid), 0)
         sign = "+" if delta > 0 else ""
-        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid)})"
+        return f"{sign}{delta} ELO (текущий рейтинг: {get_rating(pid, match.get("mode", "1v1"))})"
         
     if reason == "timeout":
         for uid in human_winners:
