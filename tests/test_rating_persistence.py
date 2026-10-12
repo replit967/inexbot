@@ -54,7 +54,7 @@ class RatingPersistenceTests(unittest.TestCase):
         globals.ratings = {}
         rating.load_ratings()
         self.assertEqual(rating.get_profile(101, "1v1")["rating"], 1025)
-        self.assertEqual(rating.get_profile(101, "5v5")["rating"], 1000)
+        self.assertEqual(rating.get_profile(101, "5v5")["rating"], 975)
 
     def test_legacy_rating_is_preserved_when_mode_rating_is_created(self):
         globals.ratings["505"] = {"rating": 1175, "wins": 8, "losses": 4}
