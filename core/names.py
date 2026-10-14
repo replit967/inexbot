@@ -1,6 +1,6 @@
 # core/names.py
 
-import json
+from core.json_store import atomic_write_json, load_json
 from config import NICK_TIMESTAMP_FILE
 from core import globals
 
@@ -8,31 +8,19 @@ NAMES_FILE = "names.json"
 
 
 def load_names():
-    try:
-        with open(NAMES_FILE, "r") as f:
-            globals.names = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.names = {}
-        save_names()
+    globals.names = load_json(NAMES_FILE, {}, dict)
 
 
 def save_names():
-    with open(NAMES_FILE, "w") as f:
-        json.dump(globals.names, f, indent=4)
+    return atomic_write_json(NAMES_FILE, globals.names, indent=4)
 
 
 def load_nick_timestamps():
-    try:
-        with open(NICK_TIMESTAMP_FILE, "r") as f:
-            globals.name_change_timestamps = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.name_change_timestamps = {}
-        save_nick_timestamps()
+    globals.name_change_timestamps = load_json(NICK_TIMESTAMP_FILE, {}, dict)
 
 
 def save_nick_timestamps():
-    with open(NICK_TIMESTAMP_FILE, "w") as f:
-        json.dump(globals.name_change_timestamps, f)
+    return atomic_write_json(NICK_TIMESTAMP_FILE, globals.name_change_timestamps)
 
 
 def cache_username(user):
