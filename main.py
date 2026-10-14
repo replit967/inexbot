@@ -26,7 +26,7 @@ from core.bans import load_bans
 from core.names import load_names, load_nick_timestamps
 
 from handlers.profile import start, profile, top, trust, history, set_name, set_mlbb_id, player_lookup, rating_history
-from handlers.report import report_command, load_report_log
+from handlers.report import report_command, load_report_log, load_report_cases
 from handlers.queue import find, handle_mode_choice, handle_leave_queue
 from handlers.menu import handle_menu, handle_menu_callback
 from handlers.matchmaking import (
@@ -40,6 +40,9 @@ from handlers.admin import (
     ban_command,
     unban_command,
     clear_reports_command,
+    review_reports_command,
+    confirm_report_command,
+    dismiss_report_command,
     shutdown_command,
     handle_shutdown_confirmation,
     debug_fill_5v5,
@@ -83,6 +86,7 @@ def load_all_data():
     load_nick_timestamps()
     load_mlbb_profiles()
     load_report_log()
+    load_report_cases()
     load_match_state()
     logger.info("✅ Все данные успешно загружены")
 
@@ -147,6 +151,9 @@ def main():
         ("ban", ban_command),
         ("unban", unban_command),
         ("clearreports", clear_reports_command),
+        ("reviewreports", review_reports_command),
+        ("confirmreport", confirm_report_command),
+        ("dismissreport", dismiss_report_command),
         ("shutdown", shutdown_command),
         ("debug_fill_5v5", debug_fill_5v5),
         ("reset_ratings", debug_reset_ratings),
