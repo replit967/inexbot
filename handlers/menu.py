@@ -40,7 +40,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw_text = message.text
     action = _normalize_menu_text(raw_text)
     route = MENU_ACTIONS.get(action)
-    logger.info("Menu router: user=%s text=%r normalized=%r route=%r", update.effective_user.id if update.effective_user else None, raw_text, action, route)
+    logger.info("Menu router: user=%s text=%r normalized=%r route=%r", getattr(getattr(update, "effective_user", None), "id", None), raw_text, action, route)
 
     if route == "find":
         await find(update, context)
