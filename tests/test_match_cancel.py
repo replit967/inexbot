@@ -35,7 +35,7 @@ class MatchCancellationQueueTests(unittest.IsolatedAsyncioTestCase):
             "handlers.matchmaking.register_infraction", new_callable=AsyncMock, return_value="warn"
         )
         self.rating_patch = patch("handlers.matchmaking.get_rating", side_effect=lambda uid, mode=None: 1000 + int(uid))
-        self.infraction_patch.start()
+        self.infraction_mock = self.infraction_patch.start()
         self.rating_patch.start()
 
     def tearDown(self):
@@ -128,7 +128,7 @@ class MatchCancellationQueueTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(globals.active_matches["match-1"], match)
         self.assertEqual(globals.queue_1v1, [])
-        self.infraction_patch.target.assert_not_awaited()
+        self.infraction_mock.assert_not_awaited()
         self.query.edit_message_text.assert_awaited_once()
         self.job_queue.run_repeating.assert_not_called()
 
