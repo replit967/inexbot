@@ -51,10 +51,30 @@ def get_rating_history(user_id, mode, limit=10):
     return list(history[-count:])
 
 def update_ratings(winners, losers, mode=None):
-    deltas = {}
+    """Apply one result only when winner/loser rosters are internally consistent."""
     if mode is not None and mode not in ("1v1", "5v5"):
         raise ValueError("mode must be '1v1' or '5v5'")
-    for uid in winners:
+
+    try:
+        winner_ids = [int(uid) for uid in winners]
+        loser_ids = [int(uid) for uid in losers]
+    except (TypeError, ValueError):
+        raise ValueError("winner and loser IDs must be integers") from None
+
+    if not winner_ids or not loser_ids:
+        raise ValueError("winners and losers must both be non-empty")
+    if any(uid <= 0 for uid in winner_ids + loser_ids):
+        raise ValueError("player IDs must be positive")
+    if len(winner_ids) != len(set(winner_ids)):
+        raise ValueError("duplicate player in winners")
+    if len(loser_ids) != len(set(loser_ids)):
+        raise ValueError("duplicate player in losers")
+    overlap = set(winner_ids) & set(loser_ids)
+    if overlap:
+        raise ValueError("a player cannot be both winner and loser")
+
+    deltas = {}
+    for uid in winner_ids:
         uid_str = str(uid)
         if uid_str not in globals.ratings:
             globals.ratings[uid_str] = {"rating": 1000, "wins": 0, "losses": 0}
@@ -65,8 +85,9 @@ def update_ratings(winners, losers, mode=None):
         stats["wins"] = stats.get("wins", 0) + 1
         if mode is not None:
             _record_rating_history(uid, mode, stats["rating"])
-        deltas[int(uid)] = stats["rating"] - before
-    for uid in losers:
+        deltas[uid] = stats["rating"] - before
+
+    for uid in loser_ids:
         uid_str = str(uid)
         if uid_str not in globals.ratings:
             globals.ratings[uid_str] = {"rating": 1000, "wins": 0, "losses": 0}
@@ -77,7 +98,8 @@ def update_ratings(winners, losers, mode=None):
         stats["losses"] = stats.get("losses", 0) + 1
         if mode is not None:
             _record_rating_history(uid, mode, stats["rating"])
-        deltas[int(uid)] = stats["rating"] - before
+        deltas[uid] = stats["rating"] - before
+
     save_ratings()
     return deltas
 
