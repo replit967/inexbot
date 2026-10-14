@@ -1,7 +1,7 @@
 # core/infractions.py
 
 import time
-import json
+from core.json_store import atomic_write_json, load_json
 from config import INFRACTIONS_FILE
 from core import globals
 from core.bans import ban_user
@@ -9,17 +9,11 @@ from core.trust import recalculate_trust_score
 
 
 def load_infractions():
-    try:
-        with open(INFRACTIONS_FILE, 'r') as f:
-            globals.infractions = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.infractions = {}
-        save_infractions()
+    globals.infractions = load_json(INFRACTIONS_FILE, {}, dict)
 
 
 def save_infractions():
-    with open(INFRACTIONS_FILE, 'w') as f:
-        json.dump(globals.infractions, f)
+    return atomic_write_json(INFRACTIONS_FILE, globals.infractions)
 
 
 async def register_infraction(user_id, infraction_type, context=None):

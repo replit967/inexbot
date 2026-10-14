@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from core import globals
+from core.json_store import atomic_write_json
 
 logger = logging.getLogger(__name__)
 MATCH_STATE_FILE = os.getenv("MATCH_STATE_FILE", "match_state.json")
@@ -18,7 +19,7 @@ def _json_default(value):
 
 
 def save_match_state() -> bool:
-    """Atomically persist queues and in-flight matches."""
+    """Atomically persist queues and in-flight matches with a previous snapshot backup."""
     snapshot = {
         "version": 1,
         "queue_1v1": globals.queue_1v1,
@@ -26,29 +27,9 @@ def save_match_state() -> bool:
         "active_matches": globals.active_matches,
         "pending_results": globals.pending_results,
     }
-    target = Path(MATCH_STATE_FILE)
-    temporary = None
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", dir=str(target.parent),
-            prefix=f".{target.name}.", suffix=".tmp", delete=False,
-        ) as handle:
-            temporary = handle.name
-            json.dump(snapshot, handle, ensure_ascii=False, default=_json_default)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, target)
-        return True
-    except (OSError, TypeError, ValueError):
-        logger.exception("Failed to persist matchmaking state to %s", target)
-        if temporary:
-            try:
-                os.unlink(temporary)
-            except OSError:
-                pass
-        return False
-
+    return atomic_write_json(
+        MATCH_STATE_FILE, snapshot, default=_json_default
+    )
 
 def load_match_state() -> bool:
     """Restore state and rebuild derivable lobby-leader lookup."""

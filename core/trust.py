@@ -1,24 +1,17 @@
 # core/trust.py
 
-import json
+from core.json_store import atomic_write_json, load_json
 
 from config import TRUST_FILE
 from core import globals
 
 
 def load_trust():
-    try:
-        with open(TRUST_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-        globals.trust_data = data if isinstance(data, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.trust_data = {}
-        save_trust()
+    globals.trust_data = load_json(TRUST_FILE, {}, dict)
 
 
 def save_trust():
-    with open(TRUST_FILE, "w", encoding="utf-8") as file:
-        json.dump(globals.trust_data, file, ensure_ascii=False)
+    return atomic_write_json(TRUST_FILE, globals.trust_data)
 
 
 async def recalculate_trust_score(user_id, context=None, reason=None):

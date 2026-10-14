@@ -36,13 +36,13 @@ class TrustPersistenceTests(unittest.TestCase):
         self.assertEqual(globals.trust_data["123"]["afk"], 1)
         self.assertEqual(globals.trust_data["123"]["trust_score"], 100)
 
-    def test_corrupt_trust_file_is_reinitialized(self):
+    def test_corrupt_trust_file_is_preserved(self):
         with open(self.path, "w", encoding="utf-8") as file:
             file.write("{broken")
         trust.load_trust()
         self.assertEqual(globals.trust_data, {})
         with open(self.path, encoding="utf-8") as file:
-            self.assertEqual(json.load(file), {})
+            self.assertEqual(file.read(), "{broken")
 
 
 if __name__ == "__main__":
