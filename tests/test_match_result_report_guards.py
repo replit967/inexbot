@@ -49,7 +49,7 @@ class MatchResultReportGuardTests(unittest.IsolatedAsyncioTestCase):
                 },
             }
             self.query.from_user.id = 1
-            self.query.data = f"report_win_match-{winner_side}"
+            self.query.data = f"report_win_match_{winner_side}"
             with patch("handlers.matchmaking.save_match_state"):
                 await matchmaking.handle_result_confirmation(self.update, self.context)
             self.assertEqual(
