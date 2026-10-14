@@ -14,6 +14,17 @@ class MainMenuTests(unittest.IsolatedAsyncioTestCase):
         self.update = SimpleNamespace(effective_message=self.message)
         self.context = SimpleNamespace(args=[], user_data={})
 
+    async def test_menu_normalization_ignores_emoji_and_invisible_characters(self):
+        variants = [
+            "👤 Мой профиль",
+            "👤\\ufe0f Мой профиль",
+            "👤\\u200b Мой профиль",
+            "Мой профиль",
+        ]
+        normalized = {menu._normalize_menu_text(value) for value in variants}
+        self.assertEqual(len(normalized), 1)
+        self.assertEqual(menu.MENU_ACTIONS[next(iter(normalized))], "profile")
+
     async def test_find_match_routes_to_match_search(self):
         self.message.text = "🎮 Найти матч"
         with patch("handlers.menu.find", new_callable=AsyncMock) as handler:
