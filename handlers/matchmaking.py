@@ -276,8 +276,11 @@ async def handle_lobby_id_submission(update: Update, context: ContextTypes.DEFAU
 
     lobby_ids = match.setdefault("lobby_ids", {})
     lobby_ids[side] = text
+    # setdefault does not replace an existing None in older match records.
+    if not lobby_ids.get("shared"):
+        lobby_ids["shared"] = text
+    # Persist both the side-specific and shared lobby IDs together.
     save_match_state()
-    lobby_ids.setdefault("shared", text)
     globals.waiting_lobby_id.pop(user_id, None)
 
     recipients = match.get("players", []) if match.get("mode") == "5v5" else match.get("teams", {}).get(side, [])
