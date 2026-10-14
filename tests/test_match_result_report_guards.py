@@ -65,7 +65,7 @@ class MatchResultReportGuardTests(unittest.IsolatedAsyncioTestCase):
             "confirmed": {2},
         }
         self.query.from_user.id = 1
-        self.query.data = "report_win_match-opponent"
+        self.query.data = "report_win_match_opponent"
         with patch("handlers.matchmaking.save_match_state"):
             await matchmaking.handle_result_confirmation(self.update, self.context)
         self.assertEqual(globals.active_matches["match"]["winner"], 2)
