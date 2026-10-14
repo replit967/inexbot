@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from core import globals
+from core.json_store import atomic_write_json
 
 MLBB_PROFILES_FILE = os.getenv("MLBB_PROFILES_FILE", "mlbb_profiles.json")
 _GAME_ID_RE = re.compile(r"^[0-9]{5,15}$")
@@ -40,28 +41,7 @@ def load_mlbb_profiles() -> bool:
 
 
 def save_mlbb_profiles() -> bool:
-    target = Path(MLBB_PROFILES_FILE)
-    temporary = None
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", dir=str(target.parent),
-            prefix=f".{target.name}.", suffix=".tmp", delete=False,
-        ) as handle:
-            temporary = handle.name
-            json.dump(globals.mlbb_profiles, handle, ensure_ascii=False, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, target)
-        return True
-    except (OSError, TypeError, ValueError):
-        if temporary:
-            try:
-                os.unlink(temporary)
-            except OSError:
-                pass
-        return False
-
+    return atomic_write_json(MLBB_PROFILES_FILE, globals.mlbb_profiles, indent=2)
 
 def link_mlbb_profile(user_id, game_id: str, zone_id: str):
     """Link an unverified player ID; return (success, reason)."""
