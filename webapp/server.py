@@ -157,4 +157,8 @@ async def api_welcome(request: Request, m: str):
         raise HTTPException(403, "Missing user in initData")
 
     payload = get_personal_welcome(match_id=m, user_id=user["id"])
-    return JSONResponse({"user": {"id": user["id"]}, "welcome": payload})
+    # This response contains private match details; never cache it.
+    return JSONResponse(
+        {"user": {"id": user["id"]}, "welcome": payload},
+        headers={"Cache-Control": "no-store, private", "Pragma": "no-cache"},
+    )
