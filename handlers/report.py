@@ -1,7 +1,8 @@
 """Player reports and admin review workflow."""
 
-import json
 import time
+
+from core.json_store import atomic_write_json, load_json
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -12,33 +13,19 @@ from config import REPORT_LOG_FILE, REPORT_CASES_FILE
 
 
 def load_report_log():
-    try:
-        with open(REPORT_LOG_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-        globals.report_log = data if isinstance(data, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.report_log = {}
-        save_report_log()
+    globals.report_log = load_json(REPORT_LOG_FILE, {}, dict)
 
 
 def save_report_log():
-    with open(REPORT_LOG_FILE, "w", encoding="utf-8") as file:
-        json.dump(globals.report_log, file, ensure_ascii=False)
+    return atomic_write_json(REPORT_LOG_FILE, globals.report_log)
 
 
 def load_report_cases():
-    try:
-        with open(REPORT_CASES_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-        globals.report_cases = data if isinstance(data, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.report_cases = {}
-        save_report_cases()
+    globals.report_cases = load_json(REPORT_CASES_FILE, {}, dict)
 
 
 def save_report_cases():
-    with open(REPORT_CASES_FILE, "w", encoding="utf-8") as file:
-        json.dump(globals.report_cases, file, ensure_ascii=False, indent=2)
+    return atomic_write_json(REPORT_CASES_FILE, globals.report_cases, indent=2)
 
 
 def resolve_user_id(identifier: str):
