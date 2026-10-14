@@ -1,5 +1,6 @@
 """Routing for the persistent INEXmode reply keyboard."""
 import logging
+import re
 import unicodedata
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -13,8 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_menu_text(value: str) -> str:
-    value = unicodedata.normalize("NFKC", value)
-    return "".join(c for c in value if c not in "\ufe0e\ufe0f\u200b\u200c\u200d\u2060").strip()
+    """Normalize Telegram button text across emoji and invisible Unicode variants."""
+    value = unicodedata.normalize("NFKC", value).casefold()
+    value = "".join(
+        char for char in value
+        if unicodedata.category(char) not in {"Cf", "Mn", "Me"}
+    )
+    # Ignore emoji/punctuation differences; retain letters and digits for matching.
+    return " ".join(re.findall(r"[\w]+", value, flags=re.UNICODE))
 
 
 MENU_ACTIONS = {
@@ -38,9 +45,17 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     raw_text = message.text
-    action = _normalize_menu_text(raw_text)
-    route = MENU_ACTIONS.get(action)
-    logger.info("Menu router: user=%s text=%r normalized=%r route=%r", getattr(getattr(update, "effective_user", None), "id", None), raw_text, action, route)
+    normalized = _normalize_menu_text(raw_text)
+    route = MENU_ACTIONS.get(normalized)
+    logger.info(
+        "Menu router: update_id=%s user=%s chat=%s text=%r normalized=%r route=%r",
+        getattr(update, "update_id", None),
+        getattr(getattr(update, "effective_user", None), "id", None),
+        getattr(getattr(message, "chat", None), "id", None),
+        raw_text,
+        normalized,
+        route,
+    )
 
     if route == "find":
         await find(update, context)
@@ -65,9 +80,19 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif route == "start":
         await start(update, context)
     elif route == "report":
-        await message.reply_text('🚩 Чтобы отправить жалобу, используй формат:\n/report "ник или Telegram ID" причина\n\nПример: /report "Player One" оскорбления')
+        await message.reply_text(
+            '🚩 Чтобы отправить жалобу, используй формат:\n'
+            '/report "ник или Telegram ID" причина\n\n'
+            'Пример: /report "Player One" оскорбления'
+        )
     elif route == "settings":
-        await message.reply_text("⚙️ Настройки профиля\n\nКоманды:\n• /setname <ник> — изменить ник (действует кулдаун)\n• /setmlbbid <game_id> <zone_id> — привязать MLBB ID\n\nДля поиска профиля игрока: /player <ник>.")
+        await message.reply_text(
+            "⚙️ Настройки профиля\n\n"
+            "Команды:\n"
+            "• /setname <ник> — изменить ник (действует кулдаун)\n"
+            "• /setmlbbid <game_id> <zone_id> — привязать MLBB ID\n\n"
+            "Для поиска профиля игрока: /player <ник>."
+        )
     elif context.user_data.pop("awaiting_player_lookup", False):
         context.args = [raw_text.strip()]
         await player_lookup(update, context)
