@@ -855,11 +855,66 @@ async def handle_result_confirmation(update, context):
         match['disputed'] = True
         winner_info = match.get('winner')
         reporter_id = winner_info.get("reporter") if isinstance(winner_info, dict) else winner_info
+
+        # A disputed result cancels the match, but must not strand the other players.
+        queue = globals.queue_1v1 if match.get("mode") == "1v1" else globals.queue_5v5
+        entries_by_id = {
+            int(entry["user_id"]): dict(entry)
+            for entry in match.get("queue_entries", [])
+            if isinstance(entry, dict) and entry.get("user_id") is not None
+        }
+        for pid in match.get("players", []):
+            pid = int(pid)
+            entry = entries_by_id.get(pid, {
+                "user_id": pid,
+                "elo": get_rating(pid, match.get("mode", "1v1")),
+                "joined_at": time.time(),
+                "chat_id": pid,
+                "notify_message_id": None,
+            })
+            entry["user_id"] = pid
+            entry["elo"] = get_rating(pid, match.get("mode", "1v1"))
+            entry.setdefault("joined_at", time.time())
+            entry.setdefault("chat_id", pid)
+            entry.setdefault("notify_message_id", None)
+            entry["reminder_message_id"] = None
+
+            if not is_bot_player(pid) and not any(
+                int(item.get("user_id", -1)) == pid for item in queue
+            ):
+                queue.append(entry)
+
+            old_job = globals.search_jobs.pop(pid, None)
+            if old_job:
+                old_job.schedule_removal()
+
+            if not is_bot_player(pid):
+                new_job = context.job_queue.run_repeating(
+                    globals.send_search_reminder,
+                    interval=60,
+                    first=60,
+                    data={"user_id": pid, "chat_id": entry["chat_id"]},
+                )
+                globals.search_jobs[pid] = new_job
+                try:
+                    await context.bot.send_message(
+                        pid, "🔄 Результат оспорен. Матч аннулирован, вы возвращены в очередь."
+                    )
+                except TelegramError:
+                    pass
+
+        save_match_state()
         if reporter_id and not is_bot_player(int(reporter_id)):
+            try:
+                await context.bot.send_message(
+                    reporter_id, "❌ Победа отклонена. Матч аннулирован.")
+            except TelegramError:
+                pass
+        try:
             await context.bot.send_message(
-                reporter_id, "❌ Победа отклонена. Матч аннулирован.")
-        await context.bot.send_message(user_id,
-                                       "✅ Жалоба принята. Матч аннулирован.")
+                user_id, "✅ Жалоба принята. Матч аннулирован.")
+        except TelegramError:
+            pass
 
 
 # 🧠 Используется в подтверждении результатов
