@@ -73,3 +73,27 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await player_lookup(update, context)
     else:
         await handle_lobby_id_submission(update, context)
+
+
+async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    mode = query.data.rsplit("_", 1)[-1]
+    if mode not in ("1v1", "5v5"):
+        return
+
+    from core.rating import get_rating_history
+    import time
+
+    entries = get_rating_history(query.from_user.id, mode, limit=10)
+    if not entries:
+        await query.edit_message_text(
+            f"📉 История рейтинга {mode} пока пуста. Она начнёт собираться после следующих матчей."
+        )
+        return
+
+    lines = [f"📈 История рейтинга {mode} (последние {len(entries)} изменений):", ""]
+    for entry in reversed(entries):
+        timestamp = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry["timestamp"]))
+        lines.append(f"• {timestamp} · {entry['rating']} ELO")
+    await query.edit_message_text("\n".join(lines))
