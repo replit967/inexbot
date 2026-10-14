@@ -28,6 +28,7 @@ trust_data = {}
 
 # 📝 Лог жалоб (user_id: список жалоб)
 report_log = {}  
+report_cases = {}  
 
 # 🏷️ Имена пользователей (user_id: имя)
 names = {}  
