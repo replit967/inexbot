@@ -1,23 +1,15 @@
 import json
+from core.json_store import atomic_write_json, load_json
 from config import RATING_FILE
 from core import globals
 
 
 def load_ratings():
-    try:
-        with open(RATING_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            raise ValueError("Ratings data must be an object")
-        globals.ratings = data
-    except (FileNotFoundError, json.JSONDecodeError, ValueError):
-        globals.ratings = {}
-        save_ratings()
+    globals.ratings = load_json(RATING_FILE, {}, dict)
 
 
 def save_ratings():
-    with open(RATING_FILE, "w", encoding="utf-8") as f:
-        json.dump(globals.ratings, f, ensure_ascii=False)
+    return atomic_write_json(RATING_FILE, globals.ratings)
 
 
 def _mode_data(data, mode, create=False):
@@ -94,17 +86,11 @@ MATCHES_FILE = "matches.json"
 
 
 def save_matches():
-    with open(MATCHES_FILE, "w", encoding="utf-8") as f:
-        json.dump(globals.matches, f)
+    return atomic_write_json(MATCHES_FILE, globals.matches)
 
 
 def load_matches():
-    try:
-        with open(MATCHES_FILE, "r", encoding="utf-8") as f:
-            globals.matches = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.matches = {}
-        save_matches()
+    globals.matches = load_json(MATCHES_FILE, {}, dict)
 
 
 def add_match_history(match_id, data):
