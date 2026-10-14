@@ -93,13 +93,13 @@ class RatingPersistenceTests(unittest.TestCase):
         rating.load_matches()
         self.assertEqual(globals.matches["match-1"], record)
 
-    def test_corrupt_rating_file_is_reinitialized(self):
+    def test_corrupt_rating_file_is_preserved(self):
         with open(self.ratings_path, "w", encoding="utf-8") as file:
             file.write("{invalid json")
         rating.load_ratings()
         self.assertEqual(globals.ratings, {})
         with open(self.ratings_path, encoding="utf-8") as file:
-            self.assertEqual(json.load(file), {})
+            self.assertEqual(file.read(), "{invalid json")
 
 
 if __name__ == "__main__":
