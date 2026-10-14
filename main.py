@@ -34,7 +34,6 @@ from handlers.matchmaking import (
     handle_result_confirmation,
     find_match_1v1,
     find_match_5v5,
-    handle_lobby_id_submission,
 )
 from handlers.admin import (
     ban_command,
@@ -161,15 +160,7 @@ def main():
             handle_menu,
         )
     )
-
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND,
-            handle_lobby_id_submission,
-        )
-    )
-
-    # Кнопки
+# Кнопки
     app.add_handler(CallbackQueryHandler(handle_shutdown_confirmation, pattern="^shutdown_(confirm|cancel)$"))
     app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu_history_(1v1|5v5)$"))
     app.add_handler(CallbackQueryHandler(handle_mode_choice, pattern="^mode_"))
