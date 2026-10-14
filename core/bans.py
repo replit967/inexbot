@@ -1,23 +1,17 @@
 # core/bans.py
 
 import time
-import json
+from core.json_store import atomic_write_json, load_json
 from config import BAN_FILE
 from core import globals
 
 
 def load_bans():
-    try:
-        with open(BAN_FILE, 'r') as f:
-            globals.bans = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        globals.bans = {}
-        save_bans()
+    globals.bans = load_json(BAN_FILE, {}, dict)
 
 
 def save_bans():
-    with open(BAN_FILE, 'w') as f:
-        json.dump(globals.bans, f)
+    return atomic_write_json(BAN_FILE, globals.bans)
 
 
 def is_banned(user_id):
