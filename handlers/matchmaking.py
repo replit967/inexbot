@@ -708,6 +708,9 @@ async def handle_result_confirmation(update, context):
         match = globals.active_matches.get(match_id)
         if not match:
             return
+        # Ignore stale/repeated report buttons once a result has been submitted.
+        if match.get("winner") is not None:
+            return
 
         if match.get('mode') == '5v5':
             if role not in {"blue", "red"}:
@@ -733,14 +736,16 @@ async def handle_result_confirmation(update, context):
             confirm_candidates = []
             red_captain = (roles.get("red") or {}).get("captain")
 
-            if winners_side == "blue":
-                if red_captain:
-                    confirm_candidates.append(red_captain)
-                confirm_candidates.extend(pid for pid in teams.get("red", []) if pid != red_captain)
-            else:
-                confirm_candidates.extend(pid for pid in teams.get("blue", []) if pid != user_id)
-                if red_captain and red_captain not in confirm_candidates:
-                    confirm_candidates.append(red_captain)
+            # Confirmation must come from the opposing team, not the reported winners.
+            opposing_side = "red" if winners_side == "blue" else "blue"
+            opposing_players = teams.get(opposing_side, [])
+            opposing_captain = (roles.get(opposing_side) or {}).get("captain")
+            if opposing_captain:
+                confirm_candidates.append(opposing_captain)
+            confirm_candidates.extend(
+                pid for pid in opposing_players
+                if pid != opposing_captain and pid != user_id
+            )
 
             confirm_target = next((pid for pid in confirm_candidates if pid and not is_bot_player(pid)), None)
             if confirm_target is None and confirm_candidates:
