@@ -17,8 +17,8 @@ class MainMenuTests(unittest.IsolatedAsyncioTestCase):
     async def test_menu_normalization_ignores_emoji_and_invisible_characters(self):
         variants = [
             "👤 Мой профиль",
-            "👤\\ufe0f Мой профиль",
-            "👤\\u200b Мой профиль",
+            "👤\ufe0f Мой профиль",
+            "👤\u200b Мой профиль",
             "Мой профиль",
         ]
         normalized = {menu._normalize_menu_text(value) for value in variants}
