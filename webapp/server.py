@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import urllib.parse
 import json
+import time
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -11,11 +12,29 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]  # .env must contain BOT_TOKEN
+# Telegram initData is authentication material, so reject stale payloads.
+INIT_DATA_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS", "86400"))
+INIT_DATA_FUTURE_TOLERANCE_SECONDS = 30
 app = FastAPI()
 
 
-def verify_init_data(init_data: str) -> dict:
-    data = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
+def verify_init_data(init_data: str, *, now=None) -> dict:
+    try:
+        pairs = urllib.parse.parse_qsl(
+            init_data,
+            keep_blank_values=True,
+            strict_parsing=True,
+            max_num_fields=100,
+        )
+    except ValueError:
+        raise HTTPException(403, "Malformed initData")
+
+    # Do not allow duplicate keys to be silently collapsed by dict().
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(403, "Duplicate initData fields")
+
+    data = dict(pairs)
     received_hash = data.pop("hash", None)
     if not received_hash:
         raise HTTPException(403, "No hash in initData")
@@ -25,6 +44,18 @@ def verify_init_data(init_data: str) -> dict:
     calculated_hash = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(calculated_hash, received_hash):
         raise HTTPException(403, "Bad initData signature")
+
+    try:
+        auth_date = int(data.get("auth_date"))
+    except (TypeError, ValueError):
+        raise HTTPException(403, "Missing or invalid auth_date")
+
+    current_time = int(time.time()) if now is None else int(now)
+    age = current_time - auth_date
+    if age > INIT_DATA_MAX_AGE_SECONDS:
+        raise HTTPException(403, "Expired initData")
+    if age < -INIT_DATA_FUTURE_TOLERANCE_SECONDS:
+        raise HTTPException(403, "initData auth_date is in the future")
 
     if "user" in data:
         try:
