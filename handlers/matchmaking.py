@@ -591,6 +591,11 @@ async def handle_match_actions(update, context):
         match = globals.active_matches.get(match_id)
         if not match or user_id not in match.get("players", []):
             return
+        # Cancellation is only valid before a match starts or a result is reported.
+        # Otherwise a stale/duplicate cancel button could erase an in-progress result.
+        if match.get("started") or match.get("winner") or match_id in globals.pending_results:
+            await query.edit_message_text("⚠️ Нельзя отменить матч после его начала или отправки результата.")
+            return
         globals.active_matches.pop(match_id, None)
         save_match_state()
 
