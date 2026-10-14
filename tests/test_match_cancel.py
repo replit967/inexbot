@@ -111,5 +111,27 @@ class MatchCancellationQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(globals.queue_1v1[0]["user_id"], 2)
 
 
+    async def test_started_match_cannot_be_cancelled(self):
+        match = {
+            "players": [1, 2],
+            "mode": "1v1",
+            "started": True,
+            "winner": None,
+            "queue_entries": [
+                {"user_id": 1, "elo": 1000, "joined_at": 1.0},
+                {"user_id": 2, "elo": 1000, "joined_at": 1.0},
+            ],
+        }
+        globals.active_matches["match-1"] = match
+
+        await matchmaking.handle_match_actions(self.update, self.context)
+
+        self.assertIs(globals.active_matches["match-1"], match)
+        self.assertEqual(globals.queue_1v1, [])
+        self.infraction_patch.target.assert_not_awaited()
+        self.query.edit_message_text.assert_awaited_once()
+        self.job_queue.run_repeating.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
