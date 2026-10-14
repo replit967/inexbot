@@ -174,7 +174,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern="^menu_history_(1v1|5v5)$"))
     app.add_handler(CallbackQueryHandler(handle_mode_choice, pattern="^mode_"))
     app.add_handler(CallbackQueryHandler(handle_leave_queue, pattern="^leave_"))
-    app.add_handler(CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel)_"))
+    app.add_handler(CallbackQueryHandler(handle_match_actions, pattern="^(ready|cancel|request_lobby)_"))
     app.add_handler(CallbackQueryHandler(handle_result_confirmation, pattern="^(report_win|confirm_win|reject_win)_"))
 
     app.add_handler(CommandHandler("debug_mention", debug_mention, filters=filters.ChatType.GROUPS))

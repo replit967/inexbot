@@ -1,4 +1,7 @@
+import ast
+import re
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -132,6 +135,45 @@ class MatchmakingAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(globals.active_matches["m1"].get("disputed", False))
         self.assertNotIn("m1", globals.pending_results)
         self.context.bot.send_message.assert_not_awaited()
+
+
+    def test_request_lobby_callback_is_registered(self):
+        main_path = Path(__file__).resolve().parents[1] / "main.py"
+        tree = ast.parse(main_path.read_text(encoding="utf-8"))
+        matching_patterns = []
+
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_handler"
+                and node.args
+            ):
+                continue
+
+            handler = node.args[0]
+            if not (
+                isinstance(handler, ast.Call)
+                and isinstance(handler.func, ast.Name)
+                and handler.func.id == "CallbackQueryHandler"
+                and handler.args
+                and isinstance(handler.args[0], ast.Name)
+                and handler.args[0].id == "handle_match_actions"
+            ):
+                continue
+
+            pattern_kw = next(
+                (kw for kw in handler.keywords if kw.arg == "pattern"),
+                None,
+            )
+            if pattern_kw is not None:
+                matching_patterns.append(ast.literal_eval(pattern_kw.value))
+
+        self.assertTrue(
+            any(re.match(pattern, "request_lobby_m1") for pattern in matching_patterns),
+            "request_lobby_ callbacks must be routed to handle_match_actions",
+        )
+
 
 
 if __name__ == "__main__":
