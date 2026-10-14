@@ -59,6 +59,22 @@ class WebAppWelcomeTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 403)
 
+
+    def test_api_welcome_response_is_not_cacheable(self):
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+
+        with patch.object(server, "verify_init_data", return_value={"user": {"id": 101}}):
+            client = TestClient(server.app)
+            response = client.get(
+                "/api/welcome?m=m5",
+                headers={"X-Telegram-Init-Data": "test-init-data"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("cache-control"), "no-store, private")
+        self.assertEqual(response.headers.get("pragma"), "no-cache")
+
     def test_missing_match_returns_404(self):
         with self.assertRaises(HTTPException) as raised:
             server.get_personal_welcome("does-not-exist", 101)
