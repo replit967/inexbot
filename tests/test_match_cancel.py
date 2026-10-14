@@ -35,7 +35,7 @@ class MatchCancellationQueueTests(unittest.IsolatedAsyncioTestCase):
             "handlers.matchmaking.register_infraction", new_callable=AsyncMock, return_value="warn"
         )
         self.rating_patch = patch("handlers.matchmaking.get_rating", side_effect=lambda uid, mode=None: 1000 + int(uid))
-        self.infraction_patch.start()
+        self.infraction_mock = self.infraction_patch.start()
         self.rating_patch.start()
 
     def tearDown(self):
@@ -109,6 +109,28 @@ class MatchCancellationQueueTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(globals.queue_1v1), 1)
         self.assertEqual(globals.queue_1v1[0]["user_id"], 2)
+
+
+    async def test_started_match_cannot_be_cancelled(self):
+        match = {
+            "players": [1, 2],
+            "mode": "1v1",
+            "started": True,
+            "winner": None,
+            "queue_entries": [
+                {"user_id": 1, "elo": 1000, "joined_at": 1.0},
+                {"user_id": 2, "elo": 1000, "joined_at": 1.0},
+            ],
+        }
+        globals.active_matches["match-1"] = match
+
+        await matchmaking.handle_match_actions(self.update, self.context)
+
+        self.assertIs(globals.active_matches["match-1"], match)
+        self.assertEqual(globals.queue_1v1, [])
+        self.infraction_mock.assert_not_awaited()
+        self.query.edit_message_text.assert_awaited_once()
+        self.job_queue.run_repeating.assert_not_called()
 
 
 if __name__ == "__main__":

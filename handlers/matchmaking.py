@@ -276,8 +276,11 @@ async def handle_lobby_id_submission(update: Update, context: ContextTypes.DEFAU
 
     lobby_ids = match.setdefault("lobby_ids", {})
     lobby_ids[side] = text
+    # setdefault does not replace an existing None in older match records.
+    if not lobby_ids.get("shared"):
+        lobby_ids["shared"] = text
+    # Persist both the side-specific and shared lobby IDs together.
     save_match_state()
-    lobby_ids.setdefault("shared", text)
     globals.waiting_lobby_id.pop(user_id, None)
 
     recipients = match.get("players", []) if match.get("mode") == "5v5" else match.get("teams", {}).get(side, [])
@@ -587,6 +590,11 @@ async def handle_match_actions(update, context):
         match_id = data.split("_", 1)[1]
         match = globals.active_matches.get(match_id)
         if not match or user_id not in match.get("players", []):
+            return
+        # Cancellation is only valid before a match starts or a result is reported.
+        # Otherwise a stale/duplicate cancel button could erase an in-progress result.
+        if match.get("started") or match.get("winner") or match_id in globals.pending_results:
+            await query.edit_message_text("⚠️ Нельзя отменить матч после его начала или отправки результата.")
             return
         globals.active_matches.pop(match_id, None)
         save_match_state()
