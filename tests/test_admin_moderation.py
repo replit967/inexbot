@@ -82,7 +82,7 @@ class AdminModerationTests(unittest.IsolatedAsyncioTestCase):
         recalc.assert_awaited_once_with(
             12345, self.context, reason="жалобы очищены администратором"
         )
-        self.assertIn("Удалено записей: 2", self.reply.await_args.args[0])
+        self.assertIn("Удалено записей кулдауна: 2", self.reply.await_args.args[0])
 
 
 if __name__ == "__main__":
